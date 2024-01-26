@@ -130,6 +130,7 @@ def _get_time_bounds(
     lat_nadir = lat_nadir[numpy.isfinite(lat_nadir)]
     if lat_nadir[0] > lat_nadir[-1]:
         lat_nadir = lat_nadir[::-1]
+        selected_time = selected_time[::-1]
     y0 = intersection[0].lat
     y1 = intersection[1].lat if len(intersection) > 1 else y0
     t0 = numpy.searchsorted(lat_nadir, y0)
