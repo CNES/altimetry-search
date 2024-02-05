@@ -135,10 +135,11 @@ def _get_time_bounds(
     y1 = intersection[1].lat if len(intersection) > 1 else y0
     t0 = numpy.searchsorted(lat_nadir, y0)
     t1 = numpy.searchsorted(lat_nadir, y1)
-    return (
+    bounds = (
         selected_time[min(t0, t1)],
         selected_time[max(t0, t1)],
     )
+    return min(bounds), max(bounds)
 
 
 def get_pass_passage_time(
