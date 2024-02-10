@@ -380,7 +380,7 @@ class MapSelection:
             selected_passes.rename(
                 columns={
                     'first_measurement': 'First date',
-                    'last_measurement': 'Fast date',
+                    'last_measurement': 'Last date',
                     'cycle_number': 'Cycle number',
                     'pass_number': 'Pass number'
                 },
