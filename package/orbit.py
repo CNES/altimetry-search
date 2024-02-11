@@ -16,7 +16,7 @@ import xarray
 from . import orf
 
 #: Orbit Repetition File
-ORF = pathlib.Path(__file__).parent / 'SWOT_ORF.txt'
+ORF = pathlib.Path(__file__).parent / 'SWOT_ORF.json'
 
 #: Orbit File
 DATASET = pathlib.Path(__file__).parent / 'SWOT_orbit.nc'
@@ -49,7 +49,7 @@ def calculate_cycle_axis(
     Returns:
         Temporal axis of the cycle.
     """
-    cycles = orf.load(ORF)
+    cycles = orf.load_json(ORF)
 
     cycle_first_measurement = numpy.full(
         (200, ),
