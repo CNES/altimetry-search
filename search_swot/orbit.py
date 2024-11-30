@@ -127,12 +127,16 @@ def _get_time_bounds(
         Time bounds of the selected pass.
     """
     # Remove NaN values
+    selected_time = selected_time[numpy.isfinite(lat_nadir)]
     lat_nadir = lat_nadir[numpy.isfinite(lat_nadir)]
+
     if lat_nadir[0] > lat_nadir[-1]:
         lat_nadir = lat_nadir[::-1]
         selected_time = selected_time[::-1]
+
     y0 = intersection[0].lat
-    y1 = intersection[1].lat if len(intersection) > 1 else y0
+    y1 = intersection[len(intersection) -
+                      1].lat if len(intersection) > 1 else y0
     t0 = numpy.searchsorted(lat_nadir, y0)
     t1 = numpy.searchsorted(lat_nadir, y1)
     bounds = (
@@ -159,6 +163,7 @@ def get_pass_passage_time(
         lon = ds.line_string_lon.values[passes, :]
         lat = ds.line_string_lat.values[passes, :]
         pass_time = ds.pass_time.values[passes, :]
+        lat_nadir = ds.lat_nadir.values[passes, :]
 
     result: NDArray[numpy.void] = numpy.ndarray(
         (len(passes), ),
@@ -180,7 +185,7 @@ def get_pass_passage_time(
             row: NDArray[numpy.void] = result[jx]
             row['pass_number'] = pass_index + 1
             row['first_time'], row['last_time'] = _get_time_bounds(
-                lat[ix, :],
+                lat_nadir[ix, :],
                 pass_time[ix, :],
                 intersection,
             )

@@ -1,4 +1,4 @@
-name: where_is_swot
+name: search_swot
 channels:
   - conda-forge
 dependencies:
