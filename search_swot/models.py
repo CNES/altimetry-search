@@ -1,4 +1,10 @@
-from enum import Enum, auto
+from dataclasses import dataclass, field
+from enum import Enum, StrEnum, auto
+
+
+class Mission(StrEnum):
+    SWOT_SWATH = ('Swot - swath')
+    SWOT_NADIR = ('Swot - nadir')
 
 
 class MissionType(Enum):
@@ -6,23 +12,25 @@ class MissionType(Enum):
     NADIR = auto()
 
 
-class Mission(Enum):
-    SWOT_SWATH = ('Swot - swath', MissionType.SWATH, 'resources/SWOT_ORF.json',
-                  'resources/SWOT_orbit.nc', 584)
-    SWOT_NADIR = ('Swot - nadir', MissionType.NADIR, 'resources/SWOT_ORF.json',
-                  'resources/SWOT_orbit.nc', 584)
-    JASON3 = ('Jason 3', MissionType.NADIR, 'resources/SWOT_ORF.json',
-              'resources/SWOT_orbit.nc', 584)
+@dataclass
+class MissionProperties:
+    mission_type: MissionType = field(default_factory=MissionType)
+    orf_file: str = field(default_factory=str)
+    orbit_file: str = field(default_factory=str)
+    passes_per_cycle: int = field(default_factory=int)
 
-    def __new__(cls, display: str, mission_type: MissionType, orf_file: str,
-                orbit_file: str, passes_per_cycle: int):
-        obj = object.__new__(cls)
-        obj._value_ = display
-        obj.mission_type = mission_type
-        obj.orf_file = orf_file
-        obj.orbit_file = orbit_file
-        obj.passes_per_cycle = passes_per_cycle
-        return obj
 
-    def __str__(self):
-        return self._value_
+missions_properties = {
+    Mission.SWOT_SWATH:
+    MissionProperties(MissionType.SWATH, 'resources/SWOT_ORF.json',
+                      'resources/SWOT_orbit.nc', 584),
+    Mission.SWOT_NADIR:
+    MissionProperties(MissionType.NADIR, 'resources/SWOT_ORF.json',
+                      'resources/SWOT_orbit.nc', 584)
+}
+
+
+class MissionPropertiesLoader:
+
+    def load(m: Mission):
+        return missions_properties[m]

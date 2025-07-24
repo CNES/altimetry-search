@@ -15,7 +15,7 @@ from pyinterp import TemporalAxis
 import pyinterp.geodetic as py_geod
 import xarray as xr
 
-from .models import Mission
+from .models import MissionProperties
 from .orf import load_json
 
 
@@ -33,18 +33,19 @@ def get_cycle_duration(dataset: xr.Dataset) -> np.timedelta64:
     return end_time - start_time
 
 
-def calculate_cycle_axis(cycle_duration: np.timedelta64,
-                         mission: Mission) -> TemporalAxis:
+def calculate_cycle_axis(
+        cycle_duration: np.timedelta64,
+        mission_properties: MissionProperties) -> TemporalAxis:
     """Calculate the cycle axis.
 
     Args:
-        cycle_duration: Duration of a cycle
-        mission: Mission selected
+        cycle_duration: Duration of a cycle.
+        mission_properties: Selected mission's properties.
 
     Returns:
         Temporal axis of the cycle.
     """
-    orf_file = pl.Path(__file__).parent / mission.orf_file
+    orf_file = pl.Path(__file__).parent / mission_properties.orf_file
     cycles = load_json(orf_file.resolve())
 
     cycle_first_measurement = np.full(
@@ -63,32 +64,35 @@ def calculate_cycle_axis(cycle_duration: np.timedelta64,
 
 
 def get_selected_passes(
-        mission: Mission,
+        mission_properties: MissionProperties,
         date: np.datetime64,
         search_duration: np.timedelta64 | None = None) -> pd.DataFrame:
     """Return the selected passes.
 
     Args:
+        mission_properties: Selected mission's properties.
         date: Date of the first pass.
-        mission: Mission selected
         search_duration: Duration of the search.
 
     Returns:
         Temporal axis of the selected passes.
     """
-    orbit_file = pl.Path(__file__).parent / mission.orbit_file
+    orbit_file = pl.Path(__file__).parent / mission_properties.orbit_file
     with xr.open_dataset(orbit_file.resolve(), decode_timedelta=True) as ds:
         cycle_duration = get_cycle_duration(ds)
         search_duration = search_duration or cycle_duration
-        axis = calculate_cycle_axis(cycle_duration, mission)
+        axis = calculate_cycle_axis(cycle_duration, mission_properties)
         dates = np.array([date, date + search_duration])
         indices = axis.find_indexes(dates).ravel()
         cycle_numbers = np.repeat(
-            np.arange(indices[0], indices[-1]) + 1, mission.passes_per_cycle)
+            np.arange(indices[0], indices[-1]) + 1,
+            mission_properties.passes_per_cycle)
         axis_slice = axis[indices[0]:indices[-1] + 1]
-        first_date_of_cycle = np.repeat(axis_slice, mission.passes_per_cycle)
-        pass_numbers = np.tile(np.arange(1, mission.passes_per_cycle + 1),
-                               indices[-1] - indices[0])
+        first_date_of_cycle = np.repeat(axis_slice,
+                                        mission_properties.passes_per_cycle)
+        pass_numbers = np.tile(
+            np.arange(1, mission_properties.passes_per_cycle + 1),
+            indices[-1] - indices[0])
         dates_of_selected_passes = np.vstack(
             (ds.start_time.values, ) * len(axis_slice)).T + axis_slice
         dates_of_selected_passes = dates_of_selected_passes.T.ravel()
@@ -144,12 +148,13 @@ def _get_time_bounds(
     return min(bounds), max(bounds)
 
 
-def get_pass_passage_time(mission: Mission, selected_passes: pd.DataFrame,
+def get_pass_passage_time(mission_properties: MissionProperties,
+                          selected_passes: pd.DataFrame,
                           polygon: py_geod.Polygon | None) -> pd.DataFrame:
     """Return the passage time of the selected passes.
 
     Args:
-        mission: Mission selected
+        mission_properties: Selected mission's properties.
         selected_passes: Selected passes.
         polygon: Polygon used to select the passes.
 
@@ -157,7 +162,7 @@ def get_pass_passage_time(mission: Mission, selected_passes: pd.DataFrame,
         Passage time of the selected passes.
     """
     passes = np.array(sorted(set(selected_passes['pass_number']))) - 1
-    orbit_file = pl.Path(__file__).parent / mission.orbit_file
+    orbit_file = pl.Path(__file__).parent / mission_properties.orbit_file
     with xr.open_dataset(orbit_file.resolve(), decode_timedelta=True) as ds:
         lon = ds.line_string_lon.values[passes, :]
         lat = ds.line_string_lat.values[passes, :]

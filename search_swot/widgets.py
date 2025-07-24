@@ -6,7 +6,7 @@
 
 import base64
 from collections.abc import Callable
-import dataclasses
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 import traceback
 
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pyinterp.geodetic as py_geod
 
-from .models import Mission
+from .models import Mission, MissionProperties, MissionPropertiesLoader
 from .orbit import get_pass_passage_time, get_selected_passes
 from .plotting import HalfOrbitFootprint, plot_selected_passes
 
@@ -54,15 +54,15 @@ class InvalidDate(Exception):
     """Invalid date exception."""
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclass(frozen=True)
 class DateSelection:
     """Date selection widget."""
 
     #: First date
-    start_date: ipy_w.DatePicker = dataclasses.field(init=False)
+    start_date: ipy_w.DatePicker = field(init=False)
 
     #: Last date
-    last_date: ipy_w.DatePicker = dataclasses.field(init=False)
+    last_date: ipy_w.DatePicker = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -140,37 +140,35 @@ def _setup_map(
     return m
 
 
-@dataclasses.dataclass
+@dataclass
 class MapSelection:
     """Map selection."""
     #: Selected area
     selection: py_geod.Polygon | None = None
     #: Bounds of the selected area
     bounds: tuple[tuple[float, float],
-                  tuple[float, float]] = dataclasses.field(
-                      default_factory=lambda: DEFAULT_BOUNDS)
+                  tuple[float,
+                        float]] = field(default_factory=lambda: DEFAULT_BOUNDS)
     #: HalfOrbit footprint to display
-    half_orbits: list[HalfOrbitFootprint] = dataclasses.field(
-        default_factory=list)
+    half_orbits: list[HalfOrbitFootprint] = field(default_factory=list)
     #: Date selection widget
-    date_selection: DateSelection = dataclasses.field(
-        default_factory=DateSelection)
+    date_selection: DateSelection = field(default_factory=DateSelection)
     #: Search button
-    search: ipy_w.Button = dataclasses.field(
+    search: ipy_w.Button = field(
         default_factory=lambda: ipy_w.Button(description='Search'))
     #: Help button
-    help: ipy_w.Button = dataclasses.field(
+    help: ipy_w.Button = field(
         default_factory=lambda: ipy_w.Button(description='Help'))
     #: Map widget
-    m: ipy_l.Map = dataclasses.field(init=False)
+    m: ipy_l.Map = field(init=False)
     #: Output widget
-    out: ipy_w.Output = dataclasses.field(default_factory=ipy_w.Output)
+    out: ipy_w.Output = field(default_factory=ipy_w.Output)
     #: Main widget
-    main_widget: ipy_w.VBox = dataclasses.field(init=False)
+    main_widget: ipy_w.VBox = field(init=False)
     #: Widget to display a message (information or error)
     widget_message: ipy_w.VBox | None = None
     # Widget to choose a mission
-    mission_widget: ipy_w.Dropdown = dataclasses.field(
+    mission_widget: ipy_w.Dropdown = field(
         default_factory=lambda: ipy_w.Dropdown(options=[(member.value, member)
                                                         for member in Mission],
                                                description='Mission:'))
@@ -305,8 +303,16 @@ class MapSelection:
             with self.out:
                 display('Computing...')
 
+            mission_properties = MissionPropertiesLoader.load(
+                self.mission_widget.value)
+
+            first_date, search_duration = self.date_selection.values()
+
             # Compute the selected passes.
-            selected_passes = compute_selected_passes(self)
+            selected_passes = compute_selected_passes(self.selection,
+                                                      first_date,
+                                                      search_duration,
+                                                      mission_properties)
 
             # If no pass is found, display a message and return.
             if len(selected_passes) == 0:
@@ -319,7 +325,7 @@ class MapSelection:
 
             # Plot the half_orbits on the map.
             self.half_orbits = plot_selected_passes(self.selection,
-                                                    self.mission_widget.value,
+                                                    mission_properties,
                                                     self.bounds[0][0],
                                                     selected_passes)
 
@@ -368,24 +374,29 @@ class MapSelection:
         # pylint: enable=broad-exception-caught,broad-exception-caught
 
 
-def compute_selected_passes(map_selection: MapSelection) -> pd.DataFrame:
+def compute_selected_passes(
+        selected_area: py_geod.Polygon, first_date: np.datetime64,
+        search_duration: np.timedelta64,
+        mission_properties: MissionProperties) -> pd.DataFrame:
     """Compute the selected passes.
 
     Args:
-        map_selection: Map Selection.
+        selected_area: selected area
+        first_date: selected first date
+        search_duration: search duration
+        mission_properties: selected mission's properties
 
     Returns:
         Selected passes.
     """
-    if map_selection.selection is None:
+    if selected_area is None:
         raise ValueError('No area selected.')
-    first_date, search_duration = map_selection.date_selection.values()
     if search_duration < np.timedelta64(0, 'D'):  # type: ignore
         raise InvalidDate('First date must be before last date.')
-    mission = map_selection.mission_widget.value
-    selected_passes = get_selected_passes(mission, first_date, search_duration)
-    pass_passage_time = get_pass_passage_time(mission, selected_passes,
-                                              map_selection.selection)
+    selected_passes = get_selected_passes(mission_properties, first_date,
+                                          search_duration)
+    pass_passage_time = get_pass_passage_time(mission_properties,
+                                              selected_passes, selected_area)
     selected_passes = selected_passes.join(
         pass_passage_time.set_index('pass_number'),
         on='pass_number',
