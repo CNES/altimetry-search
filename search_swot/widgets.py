@@ -178,10 +178,15 @@ class MapSelection:
                             self.help, self.search, self.handle_draw)
         self.main_widget = ipy_w.VBox([self.m, self.out])
         self.search.on_click(self.handle_compute)
+        self.mission_widget.observe(self.mission_widget_callback,
+                                    names='value')
         self.help.on_click(lambda _args: self.display_message(
             HTML_HELP.format(mission=self.mission_widget.value),
             button_style='info',
             width='800px'))
+
+    def mission_widget_callback(self, change):
+        self.remove_half_orbit_footprints()
 
     def display(self) -> ipy_w.Widget:
         """Display the widget.
