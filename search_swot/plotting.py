@@ -1,15 +1,15 @@
 import dataclasses
-import pathlib as pl
+import pathlib
 
-import ipyleaflet as ipy_l
-import ipywidgets as ipy_w
-import numpy as np
+import ipyleaflet
+import ipywidgets
+import numpy
 from numpy.typing import NDArray
-import pandas as pd
-import pyinterp.geodetic as py_geod
-import xarray as xr
+import pandas
+import pyinterp.geodetic
+import xarray
 
-from .models import Mission, MissionType
+from . import models
 
 # List of HTML colors
 COLORS: list[str] = [
@@ -58,55 +58,58 @@ POPUP_TEMPLATE = """
 @dataclasses.dataclass
 class HalfOrbitFootprint:
     #: Marker of the half orbit footprint to display the pass number
-    marker: ipy_l.Marker
+    marker: ipyleaflet.Marker
 
 
 @dataclasses.dataclass
 class SwathFootprint(HalfOrbitFootprint):
     """Swath footprint definition."""
     #: Left polygon of the swath footprint
-    left: ipy_l.Polygon
+    left: ipyleaflet.Polygon
     #: Right polygon of the swath footprint
-    right: ipy_l.Polygon
+    right: ipyleaflet.Polygon
 
 
 @dataclasses.dataclass
 class NadirFootprint(HalfOrbitFootprint):
     """Nadir footprint definition."""
     #: Polygon of the nadir footprint
-    line: ipy_l.Polyline
+    line: ipyleaflet.Polyline
 
 
 #: Type of a pass polygon/line
-PassPolygon = tuple[int, py_geod.Polygon]
-PassLine = tuple[int, py_geod.LineString]
+PassPolygon = tuple[int, pyinterp.geodetic.Polygon]
+PassLine = tuple[int, pyinterp.geodetic.LineString]
 
 
-def plot_selected_passes(selected_area: py_geod.Polygon, mission: Mission,
+def plot_selected_passes(selected_area: pyinterp.geodetic.Polygon,
+                         mission_properties: models.MissionProperties,
                          east: float,
-                         df: pd.DataFrame) -> list[SwathFootprint]:
+                         df: pandas.DataFrame) -> list[HalfOrbitFootprint]:
     """Plot the selected passes.
 
     Args:
         selected_area: Selected area.
-        mission: Mission.
+        mission_properties: Selected mission's properties
         east: East longitude.
         df: Selected passes.
 
     Returns:
         The half_orbits plotted on the map.
     """
-    bbox: py_geod.Polygon = (  # type: ignore[assignment]
+    bbox: pyinterp.geodetic.Polygon = (  # type: ignore[assignment]
         selected_area if selected_area is not None else
-        py_geod.Box.whole_earth().as_polygon())
+        pyinterp.geodetic.Box.whole_earth().as_polygon())
 
-    if mission.mission_type == MissionType.SWATH:
+    markers: dict[int, ipyleaflet.Marker] = {}
+
+    if mission_properties.mission_type == models.MissionType.SWATH:
         (left_swath, right_swath) = load_polygons(
-            mission, df['pass_number'].values)  # type: ignore[arg-type]
+            mission_properties,
+            df['pass_number'].values)  # type: ignore[arg-type]
 
-        left_layers: dict[int, ipy_l.Polygon] = {}
-        right_layers: dict[int, ipy_l.Polygon] = {}
-        markers: dict[int, ipy_l.Marker] = {}
+        left_layers: dict[int, ipyleaflet.Polygon] = {}
+        right_layers: dict[int, ipyleaflet.Polygon] = {}
 
         tuple(
             map(lambda x: plot_swath(*x, bbox, left_layers, markers, east),
@@ -115,27 +118,27 @@ def plot_selected_passes(selected_area: py_geod.Polygon, mission: Mission,
             map(lambda x: plot_swath(*x, bbox, right_layers, markers, east),
                 right_swath))
         return [
-            SwathFootprint(left=left_layers.get(pass_number, ipy_l.Polygon()),
+            SwathFootprint(left=left_layers.get(pass_number,
+                                                ipyleaflet.Polygon()),
                            right=right_layers.get(pass_number,
-                                                  ipy_l.Polygon()),
+                                                  ipyleaflet.Polygon()),
                            marker=marker)
             for pass_number, marker in markers.items()
         ]
 
-    nadir = load_lines(mission,
+    nadir = load_lines(mission_properties,
                        df['pass_number'].values)  # type: ignore[arg-type]
 
-    layers: dict[int, ipy_l.Polyline] = {}
-    markers: dict[int, ipy_l.Marker] = {}
+    layers: dict[int, ipyleaflet.Polyline] = {}
     tuple(map(lambda x: plot_line(*x, bbox, layers, markers, east), nadir))
     return [
-        NadirFootprint(line=layers.get(pass_number, ipy_l.Polyline()),
+        NadirFootprint(line=layers.get(pass_number, ipyleaflet.Polyline()),
                        marker=marker)
         for pass_number, marker in markers.items()
     ]
 
 
-def _load_one_polygon(x: NDArray, y: NDArray) -> py_geod.Polygon:
+def _load_one_polygon(x: NDArray, y: NDArray) -> pyinterp.geodetic.Polygon:
     """Load a polygon from a set of coordinates.
 
     Args:
@@ -145,19 +148,20 @@ def _load_one_polygon(x: NDArray, y: NDArray) -> py_geod.Polygon:
     Returns:
         Polygon.
     """
-    m = np.isfinite(x) & np.isfinite(y)
+    m = numpy.isfinite(x) & numpy.isfinite(y)
     x = x[m]
     y = y[m]
-    return py_geod.Polygon([py_geod.Point(x, y) for x, y in zip(x, y)])
+    return pyinterp.geodetic.Polygon(
+        [pyinterp.geodetic.Point(x, y) for x, y in zip(x, y)])
 
 
 def load_polygons(
-        mission: Mission,
+        mission_properties: models.MissionProperties,
         pass_number: NDArray) -> tuple[list[PassPolygon], list[PassPolygon]]:
     """Load the polygons of the selected passes.
 
     Args:
-        mission: Mission selected
+        mission_properties: Selected mission's properties
         pass_number: Pass numbers to load.
 
     Returns:
@@ -168,8 +172,9 @@ def load_polygons(
     left_polygon: list[PassPolygon] = []
     right_polygon: list[PassPolygon] = []
 
-    orbit_file = pl.Path(__file__).parent / mission.orbit_file
-    with xr.open_dataset(orbit_file.resolve(), decode_timedelta=True) as ds:
+    orbit_file = pathlib.Path(__file__).parent / mission_properties.orbit_file
+    with xarray.open_dataset(orbit_file.resolve(),
+                             decode_timedelta=True) as ds:
         for ix in index:
             left_polygon.append(
                 (ix + 1,
@@ -182,7 +187,7 @@ def load_polygons(
     return left_polygon, right_polygon
 
 
-def _load_one_line(x: NDArray, y: NDArray) -> py_geod.LineString:
+def _load_one_line(x: NDArray, y: NDArray) -> pyinterp.geodetic.LineString:
     """Load a line from a set of coordinates.
 
     Args:
@@ -192,17 +197,19 @@ def _load_one_line(x: NDArray, y: NDArray) -> py_geod.LineString:
     Returns:
         LineString.
     """
-    m = np.isfinite(x) & np.isfinite(y)
+    m = numpy.isfinite(x) & numpy.isfinite(y)
     x = x[m]
     y = y[m]
-    return py_geod.LineString([py_geod.Point(x, y) for x, y in zip(x, y)])
+    return pyinterp.geodetic.LineString(
+        [pyinterp.geodetic.Point(x, y) for x, y in zip(x, y)])
 
 
-def load_lines(mission: Mission, pass_number: NDArray) -> list[PassLine]:
+def load_lines(mission_properties: models.MissionProperties,
+               pass_number: NDArray) -> list[PassLine]:
     """Load the lines of the selected passes.
 
     Args:
-        mission: Mission selected
+        mission_properties: models.MissionProperties,
         pass_number: Pass numbers to load.
 
     Returns:
@@ -212,8 +219,9 @@ def load_lines(mission: Mission, pass_number: NDArray) -> list[PassLine]:
 
     lines: list[PassLine] = []
 
-    orbit_file = pl.Path(__file__).parent / mission.orbit_file
-    with xr.open_dataset(orbit_file.resolve(), decode_timedelta=True) as ds:
+    orbit_file = pathlib.Path(__file__).parent / mission_properties.orbit_file
+    with xarray.open_dataset(orbit_file.resolve(),
+                             decode_timedelta=True) as ds:
         for ix in index:
             lines.append((ix + 1,
                           _load_one_line(ds.line_string_lon[ix, :].values,
@@ -223,10 +231,10 @@ def load_lines(mission: Mission, pass_number: NDArray) -> list[PassLine]:
 
 def plot_swath(
     pass_number: int,
-    item: py_geod.Polygon,
-    bbox: py_geod.Polygon,
-    layers: dict[int, ipy_l.Polygon],
-    markers: dict[int, ipy_l.Marker],
+    item: pyinterp.geodetic.Polygon,
+    bbox: pyinterp.geodetic.Polygon,
+    layers: dict[int, ipyleaflet.Polygon],
+    markers: dict[int, ipyleaflet.Marker],
     east: float,
 ) -> None:
     """Plot a swath.
@@ -247,7 +255,7 @@ def plot_swath(
     (lons, lats) = _get_lons_lats(outer, east)
 
     color_id = pass_number % len(COLORS)
-    layers[pass_number] = ipy_l.Polygon(
+    layers[pass_number] = ipyleaflet.Polygon(
         locations=[(y, x) for x, y in zip(lons, lats)],
         color=COLORS[color_id],
         fill_color=COLORS[color_id],
@@ -261,10 +269,10 @@ def plot_swath(
 
 def plot_line(
     pass_number: int,
-    item: py_geod.LineString,
-    bbox: py_geod.Polygon,
-    layers: dict[int, ipy_l.Polyline],
-    markers: dict[int, ipy_l.Marker],
+    item: pyinterp.geodetic.LineString,
+    bbox: pyinterp.geodetic.Polygon,
+    layers: dict[int, ipyleaflet.Polyline],
+    markers: dict[int, ipyleaflet.Marker],
     east: float,
 ) -> None:
     """Plot nadir as a line.
@@ -285,11 +293,11 @@ def plot_line(
     (lons, lats) = _get_lons_lats(outer, east)
 
     color_id = pass_number % len(COLORS)
-    layers[pass_number] = ipy_l.Polyline(locations=[
+    layers[pass_number] = ipyleaflet.Polyline(locations=[
         (y, x) for x, y in zip(lons, lats)
     ],
-                                         color=COLORS[color_id],
-                                         fill=False)
+                                              color=COLORS[color_id],
+                                              fill=False)
 
     # Add a marker to display the pass number on the map if it does not already
     # exist.
@@ -297,24 +305,25 @@ def plot_line(
         _set_markers(markers, lons, lats, pass_number, color_id)
 
 
-def _get_lons_lats(outer: list[py_geod.Point], east: float):
-    lons = np.array([p.lon for p in outer])
-    lats = np.array([p.lat for p in outer])
-    lons = np.deg2rad(
-        py_geod.normalize_longitudes(np.array([p.lon for p in outer]), east))
-    lons = np.unwrap(lons, discont=np.pi)
-    lons = np.rad2deg(lons)
+def _get_lons_lats(outer: list[pyinterp.geodetic.Point], east: float):
+    lons = numpy.array([p.lon for p in outer])
+    lats = numpy.array([p.lat for p in outer])
+    lons = numpy.deg2rad(
+        pyinterp.geodetic.normalize_longitudes(
+            numpy.array([p.lon for p in outer]), east))
+    lons = numpy.unwrap(lons, discont=numpy.pi)
+    lons = numpy.rad2deg(lons)
 
     return lons, lats
 
 
-def _set_markers(markers: dict[int, ipy_l.Marker], lons: np.array,
-                 lats: np.array, pass_number: int, color_id: int):
+def _set_markers(markers: dict[int, ipyleaflet.Marker], lons: NDArray,
+                 lats: NDArray, pass_number: int, color_id: int):
     size = lons.size // 8
     index = max(size, 0) if pass_number % 2 == 0 else min(size * 7, size - 1)
-    marker = ipy_l.Marker(location=(lats[index], lons[index]))
+    marker = ipyleaflet.Marker(location=(lats[index], lons[index]))
     marker.draggable = False
     marker.opacity = 0.8
-    marker.popup = ipy_w.HTML(
+    marker.popup = ipywidgets.HTML(
         POPUP_TEMPLATE.format(color=COLORS[color_id], pass_number=pass_number))
     markers[pass_number] = marker

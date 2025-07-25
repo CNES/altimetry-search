@@ -5,7 +5,6 @@
 """Calculate the ephemeredes of satellites."""
 from __future__ import annotations
 
-import typing as tp
 import pathlib as pl
 
 import numpy as np

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+import dataclasses
 from enum import Enum, StrEnum, auto
 
 
@@ -12,12 +12,12 @@ class MissionType(Enum):
     NADIR = auto()
 
 
-@dataclass
+@dataclasses.dataclass
 class MissionProperties:
-    mission_type: MissionType = field(default_factory=MissionType)
-    orf_file: str = field(default_factory=str)
-    orbit_file: str = field(default_factory=str)
-    passes_per_cycle: int = field(default_factory=int)
+    mission_type: MissionType = MissionType.SWATH
+    orf_file: str = dataclasses.field(default_factory=str)
+    orbit_file: str = dataclasses.field(default_factory=str)
+    passes_per_cycle: int = dataclasses.field(default_factory=int)
 
 
 missions_properties = {
@@ -32,5 +32,5 @@ missions_properties = {
 
 class MissionPropertiesLoader:
 
-    def load(m: Mission):
+    def load(self, m: Mission):
         return missions_properties[m]

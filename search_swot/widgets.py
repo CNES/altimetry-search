@@ -6,20 +6,18 @@
 
 import base64
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import date, timedelta
+import dataclasses
+import datetime
 import traceback
 
-from IPython.display import display
-import ipyleaflet as ipy_l
-import ipywidgets as ipy_w
-import numpy as np
-import pandas as pd
-import pyinterp.geodetic as py_geod
+import IPython.display
+import ipyleaflet
+import ipywidgets
+import numpy
+import pandas
+import pyinterp.geodetic
 
-from .models import Mission, MissionProperties, MissionPropertiesLoader
-from .orbit import get_pass_passage_time, get_selected_passes
-from .plotting import HalfOrbitFootprint, plot_selected_passes
+from . import models, orbit, plotting
 
 #: Default bounds of the map
 DEFAULT_BOUNDS = ((-180, -90), (180, 90))
@@ -41,66 +39,90 @@ zoom in and out and wheel mouse to zoom in and out. Once you have selected the
 area of interest, click on the
 <span style="background-color: lightgray;"><code>Search</code></span> button to
 search for {mission} passes. The results are displayed in the table below and
-the half_orbits that intersect the area of interest are displayed on the map. Click
-on the marker to view the pass number.<br>
+the half_orbits that intersect the area of interest are displayed on the map.
+Click on the marker to view the pass number.<br>
 You can draw multiple bounding boxes, but only the last one will be used for
 the search. You can also delete one or all bounding boxes by clicking on the
 <span style="background-color: lightgray;"><code>trash</code></span> icon.<br>
-At the top right side of the map, you can select the period of interest, and the mission.
-The default period is the last 1 day.</p>"""
+At the top right side of the map, you can select the period of interest, and the
+mission. The default period is the last 1 day.</p>"""
 
 
 class InvalidDate(Exception):
     """Invalid date exception."""
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class DateSelection:
     """Date selection widget."""
 
     #: First date
-    start_date: ipy_w.DatePicker = field(init=False)
+    start_date: ipywidgets.DatePicker = dataclasses.field(init=False)
 
     #: Last date
-    last_date: ipy_w.DatePicker = field(init=False)
+    last_date: ipywidgets.DatePicker = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, 'start_date',
-            ipy_w.DatePicker(description='First date:',
-                             disabled=False,
-                             value=date.today()))
+            ipywidgets.DatePicker(description='First date:',
+                                  disabled=False,
+                                  value=datetime.date.today()))
         object.__setattr__(
             self, 'last_date',
-            ipy_w.DatePicker(description='Last date:',
-                             disabled=False,
-                             value=date.today() + timedelta(days=1)))
+            ipywidgets.DatePicker(description='Last date:',
+                                  disabled=False,
+                                  value=datetime.date.today() +
+                                  datetime.timedelta(days=1)))
 
-    def display(self) -> ipy_w.Widget:
+    def display(self) -> ipywidgets.Widget:
         """Display the widget.
 
         Returns:
             Widget to display.
         """
-        return ipy_w.VBox([self.start_date, self.last_date])
+        return ipywidgets.VBox([self.start_date, self.last_date])
 
-    def values(self) -> tuple[np.datetime64, np.timedelta64]:
+    def values(self) -> tuple[numpy.datetime64, numpy.timedelta64]:
         """Return the values of the widget.
 
         Returns:
             First date and search duration.
         """
-        return np.datetime64(self.start_date.value), np.datetime64(
-            self.last_date.value) - np.datetime64(self.start_date.value)
+        duration = numpy.datetime64(self.last_date.value) - numpy.datetime64(
+            self.start_date.value)
+        return numpy.datetime64(self.start_date.value), numpy.timedelta64(
+            duration, 's')
 
 
-def _setup_map(
-    date_selection: DateSelection,
-    mission_widget: ipy_w.Dropdown,
-    help: ipy_w.Button,
-    search: ipy_w.Button,
-    on_draw: Callable[[ipy_w.Widget, str, dict], None],
-) -> ipy_l.Map:
+def _setup_draw_control(
+    on_draw: Callable[[ipywidgets.Widget, str, dict],
+                      None]) -> ipyleaflet.Control:
+    """Setup the map.
+
+    Args:
+        on_draw: Callback called when the user draws a rectangle.
+
+    Returns:
+        Map widget.
+    """
+    draw_control = ipyleaflet.DrawControl()
+    draw_control.polyline = {}
+    draw_control.polygon = {}
+    draw_control.circlemarker = {}
+    draw_control.rectangle = {'shapeOptions': {'color': '#0000FF'}}
+    draw_control.circle = {}
+    draw_control.edit = False
+
+    draw_control.on_draw(on_draw)
+
+    return draw_control
+
+
+def _setup_map(date_selection: DateSelection,
+               mission_widget: ipywidgets.Dropdown, help: ipywidgets.Button,
+               search: ipywidgets.Button,
+               draw_control: ipyleaflet.DrawControl) -> ipyleaflet.Map:
     """Setup the map.
 
     Args:
@@ -112,71 +134,69 @@ def _setup_map(
     Returns:
         Map widget.
     """
-    layout = ipy_w.Layout(width='100%', height='600px')
+    layout = ipywidgets.Layout(width='100%', height='600px')
 
-    draw_control = ipy_l.DrawControl()
-    draw_control.polyline = {}
-    draw_control.polygon = {}
-    draw_control.circlemarker = {}
-    draw_control.rectangle = {'shapeOptions': {'color': '#0000FF'}}
-    draw_control.circle = {}
-    draw_control.edit = False
-
-    m = ipy_l.Map(center=[0, 0],
-                  zoom=2,
-                  layout=layout,
-                  projection=ipy_l.projections.EPSG4326)
+    m = ipyleaflet.Map(center=[0, 0],
+                       zoom=2,
+                       layout=layout,
+                       projection=ipyleaflet.projections.EPSG4326)
     m.scroll_wheel_zoom = True
-    m.add_control(ipy_l.FullScreenControl())
+    m.add_control(ipyleaflet.FullScreenControl())
     m.add_control(draw_control)
     m.add_control(
-        ipy_l.WidgetControl(widget=mission_widget, position='topright'))
+        ipyleaflet.WidgetControl(widget=mission_widget, position='topright'))
     m.add_control(
-        ipy_l.WidgetControl(widget=date_selection.display(),
-                            position='topright'))
-    m.add_control(ipy_l.WidgetControl(widget=search, position='bottomright'))
-    draw_control.on_draw(on_draw)
-    m.add_control(ipy_l.WidgetControl(widget=help, position='bottomleft'))
+        ipyleaflet.WidgetControl(widget=date_selection.display(),
+                                 position='topright'))
+    m.add_control(
+        ipyleaflet.WidgetControl(widget=search, position='bottomright'))
+    m.add_control(ipyleaflet.WidgetControl(widget=help, position='bottomleft'))
     return m
 
 
-@dataclass
+@dataclasses.dataclass
 class MapSelection:
     """Map selection."""
     #: Selected area
-    selection: py_geod.Polygon | None = None
+    selection: pyinterp.geodetic.Polygon | None = None
     #: Bounds of the selected area
     bounds: tuple[tuple[float, float],
-                  tuple[float,
-                        float]] = field(default_factory=lambda: DEFAULT_BOUNDS)
+                  tuple[float, float]] = dataclasses.field(
+                      default_factory=lambda: DEFAULT_BOUNDS)
     #: HalfOrbit footprint to display
-    half_orbits: list[HalfOrbitFootprint] = field(default_factory=list)
+    half_orbits: list[plotting.HalfOrbitFootprint] = dataclasses.field(
+        default_factory=list)
     #: Date selection widget
-    date_selection: DateSelection = field(default_factory=DateSelection)
+    date_selection: DateSelection = dataclasses.field(
+        default_factory=DateSelection)
     #: Search button
-    search: ipy_w.Button = field(
-        default_factory=lambda: ipy_w.Button(description='Search'))
+    search: ipywidgets.Button = dataclasses.field(
+        default_factory=lambda: ipywidgets.Button(description='Search'))
     #: Help button
-    help: ipy_w.Button = field(
-        default_factory=lambda: ipy_w.Button(description='Help'))
+    help: ipywidgets.Button = dataclasses.field(
+        default_factory=lambda: ipywidgets.Button(description='Help'))
     #: Map widget
-    m: ipy_l.Map = field(init=False)
+    m: ipyleaflet.Map = dataclasses.field(init=False)
+    # Draw control of the map
+    draw_control: ipyleaflet.DrawControl = dataclasses.field(init=False)
     #: Output widget
-    out: ipy_w.Output = field(default_factory=ipy_w.Output)
+    out: ipywidgets.Output = dataclasses.field(
+        default_factory=ipywidgets.Output)
     #: Main widget
-    main_widget: ipy_w.VBox = field(init=False)
+    main_widget: ipywidgets.VBox = dataclasses.field(init=False)
     #: Widget to display a message (information or error)
-    widget_message: ipy_w.VBox | None = None
+    widget_message: ipywidgets.VBox | None = None
     # Widget to choose a mission
-    mission_widget: ipy_w.Dropdown = field(
-        default_factory=lambda: ipy_w.Dropdown(options=[(member.value, member)
-                                                        for member in Mission],
-                                               description='Mission:'))
+    mission_widget: ipywidgets.Dropdown = dataclasses.field(
+        default_factory=lambda: ipywidgets.Dropdown(
+            options=[(member.value, member) for member in models.Mission],
+            description='Mission:'))
 
     def __post_init__(self) -> None:
+        self.draw_control = _setup_draw_control(self.handle_draw)
         self.m = _setup_map(self.date_selection, self.mission_widget,
-                            self.help, self.search, self.handle_draw)
-        self.main_widget = ipy_w.VBox([self.m, self.out])
+                            self.help, self.search, self.draw_control)
+        self.main_widget = ipywidgets.VBox([self.m, self.out])
         self.search.on_click(self.handle_compute)
         self.mission_widget.observe(self.mission_widget_callback,
                                     names='value')
@@ -186,9 +206,10 @@ class MapSelection:
             width='800px'))
 
     def mission_widget_callback(self, change):
-        self.remove_half_orbit_footprints()
+        self.delete_last_selection()
+        self.draw_control.clear_polygons()
 
-    def display(self) -> ipy_w.Widget:
+    def display(self) -> ipywidgets.Widget:
         """Display the widget.
 
         Returns:
@@ -239,16 +260,17 @@ class MapSelection:
             # Build a polygon with interpolated longitudes between the first and
             # last points to restrict the search area to the latitude of the
             # selected zone.
-            x = np.array([item[0] for item in coordinates[0]])
-            y = np.array([item[1] for item in coordinates[0]])
+            x = numpy.array([item[0] for item in coordinates[0]])
+            y = numpy.array([item[1] for item in coordinates[0]])
             x0, x1 = x[0], x[2]
             y0, y1 = y[0], y[1]
-            xs = np.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
+            xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
             self.bounds = ((min(x), min(y)), (max(x), max(y)))
-            points = [py_geod.Point(item, y0) for item in reversed(xs)
-                      ] + [py_geod.Point(item, y1) for item in xs]
+            points = [
+                pyinterp.geodetic.Point(item, y0) for item in reversed(xs)
+            ] + [pyinterp.geodetic.Point(item, y1) for item in xs]
             points.append(points[0])
-            self.selection = py_geod.Polygon(points)
+            self.selection = pyinterp.geodetic.Polygon(points)
         except (KeyError, IndexError):
             self.selection = None
 
@@ -263,19 +285,19 @@ class MapSelection:
             button_style: Style of the close button.
         """
         button_style = button_style or 'danger'
-        panel = ipy_w.HTML(
+        panel = ipywidgets.HTML(
             msg,
-            layout=ipy_w.Layout(
+            layout=ipywidgets.Layout(
                 width=width,
                 line_height='1.5',  # Adjust the line height here
             ))
-        close = ipy_w.Button(description='Close.',
-                             disabled=False,
-                             button_style=button_style)
-        self.widget_message = ipy_w.VBox([panel, close])
+        close = ipywidgets.Button(description='Close.',
+                                  disabled=False,
+                                  button_style=button_style)
+        self.widget_message = ipywidgets.VBox([panel, close])
         assert self.widget_message is not None
         self.widget_message.box_style = 'danger'
-        self.widget_message.layout = ipy_w.Layout(
+        self.widget_message.layout = ipywidgets.Layout(
             display='flex',
             flex_flow='column',
             align_items='center',
@@ -283,8 +305,8 @@ class MapSelection:
         )
         close.on_click(self.handle_widget_message)
         self.m.add_control(
-            ipy_l.WidgetControl(widget=self.widget_message,
-                                position='bottomright'))
+            ipyleaflet.WidgetControl(widget=self.widget_message,
+                                     position='bottomright'))
         # Disable the search button while the message is displayed.
         self.search.disabled = True
 
@@ -306,9 +328,9 @@ class MapSelection:
             # Display a message to inform the user that the computation is in
             # progress.
             with self.out:
-                display('Computing...')
+                IPython.display.display('Computing...')
 
-            mission_properties = MissionPropertiesLoader.load(
+            mission_properties = models.MissionPropertiesLoader().load(
                 self.mission_widget.value)
 
             first_date, search_duration = self.date_selection.values()
@@ -329,10 +351,9 @@ class MapSelection:
                 return
 
             # Plot the half_orbits on the map.
-            self.half_orbits = plot_selected_passes(self.selection,
-                                                    mission_properties,
-                                                    self.bounds[0][0],
-                                                    selected_passes)
+            self.half_orbits = plotting.plot_selected_passes(
+                self.selection, mission_properties, self.bounds[0][0],
+                selected_passes)
 
             # Rename the columns of the DataFrame to display them in the
             # output widget.
@@ -354,11 +375,12 @@ class MapSelection:
             # Finally, display the DataFrame in the output widget.
             self.out.clear_output()
             with self.out:
-                display(selected_passes)
+                IPython.display.display(selected_passes)
                 # Generate a link to download the data as a CSV file.
                 csv = selected_passes.to_csv(sep=';', index=False)
                 b64 = base64.b64encode(csv.encode()).decode()
-                display(ipy_w.HTML(DOWNLOAD_TEMPLATE.format(b64=b64)))
+                IPython.display.display(
+                    ipywidgets.HTML(DOWNLOAD_TEMPLATE.format(b64=b64)))
         except InvalidDate as err:
             self.out.clear_output()
             self.display_message(str(err))
@@ -380,9 +402,9 @@ class MapSelection:
 
 
 def compute_selected_passes(
-        selected_area: py_geod.Polygon, first_date: np.datetime64,
-        search_duration: np.timedelta64,
-        mission_properties: MissionProperties) -> pd.DataFrame:
+        selected_area: pyinterp.geodetic.Polygon, first_date: numpy.datetime64,
+        search_duration: numpy.timedelta64,
+        mission_properties: models.MissionProperties) -> pandas.DataFrame:
     """Compute the selected passes.
 
     Args:
@@ -396,12 +418,13 @@ def compute_selected_passes(
     """
     if selected_area is None:
         raise ValueError('No area selected.')
-    if search_duration < np.timedelta64(0, 'D'):  # type: ignore
+    if search_duration < numpy.timedelta64(0, 'D'):  # type: ignore
         raise InvalidDate('First date must be before last date.')
-    selected_passes = get_selected_passes(mission_properties, first_date,
-                                          search_duration)
-    pass_passage_time = get_pass_passage_time(mission_properties,
-                                              selected_passes, selected_area)
+    selected_passes = orbit.get_selected_passes(mission_properties, first_date,
+                                                search_duration)
+    pass_passage_time = orbit.get_pass_passage_time(mission_properties,
+                                                    selected_passes,
+                                                    selected_area)
     selected_passes = selected_passes.join(
         pass_passage_time.set_index('pass_number'),
         on='pass_number',

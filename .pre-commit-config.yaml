@@ -1,46 +1,63 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v4.5.0
     hooks:
-      - id: mixed-line-ending
-        args: [--fix=lf]
       - id: check-case-conflict
       - id: check-docstring-first
-      - id: trailing-whitespace
-      - id: debug-statements
-      - id: double-quote-string-fixer
-      - id: end-of-file-fixer
-      - id: check-docstring-first
-      - id: check-xml
       - id: check-json
-      - id: check-yaml
-        exclude: meta.yaml
-        args: [--allow-multiple-documents, --unsafe]
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: double-quote-string-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: docs/make.bat
+      - id: trailing-whitespace
+        exclude: conda/meta.yaml
   - repo: https://github.com/asottile/pyupgrade
-    rev: "v3.20.0"
+    rev: "v3.15.0"
     hooks:
     - id: pyupgrade
-      args: [--py38-plus]
+      args: [--py310-plus]
   - repo: https://github.com/PyCQA/isort
-    rev: 6.0.1
+    rev: 5.12.0
     hooks:
       - id: isort
-  - repo: https://github.com/google/yapf
-    rev: v0.43.0
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.1.0
     hooks:
-      - id: yapf
-        additional_dependencies:
-          - toml
+      - id: flake8
+        exclude: tests
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: "v1.10.0"
     hooks:
     - id: python-check-blanket-noqa
     - id: python-no-log-warn
-    - id: python-use-type-annotations
     - id: rst-backticks
     - id: rst-directive-colons
     - id: rst-inline-touching-normal
+  - repo: https://github.com/pre-commit/mirrors-yapf
+    rev: v0.32.0
+    hooks:
+      - id: yapf
+        additional_dependencies:
+          - toml
   - repo: https://github.com/myint/docformatter
-    rev: v1.7.7
+    rev: "v1.7.7"
     hooks:
     - id: docformatter
+  - repo: https://github.com/codespell-project/codespell
+    rev: "v2.2.6"
+    hooks:
+    - id: codespell
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.0
+    hooks:
+      - id: mypy
+        exclude: docs
+        additional_dependencies:
+          # Type stubs
+          - types-requests
+          - types-setuptools
+          # Typed libraries
+          - numpy
+          - pandas
