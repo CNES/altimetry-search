@@ -236,7 +236,7 @@ def plot_swath(
     layers: dict[int, ipyleaflet.Polygon],
     markers: dict[int, ipyleaflet.Marker],
     east: float,
-) -> None:
+):
     """Plot a swath.
 
     Args:
@@ -274,7 +274,7 @@ def plot_line(
     layers: dict[int, ipyleaflet.Polyline],
     markers: dict[int, ipyleaflet.Marker],
     east: float,
-) -> None:
+):
     """Plot nadir as a line.
 
     Args:
