@@ -1,5 +1,4 @@
 import dataclasses
-import pathlib
 
 import ipyleaflet
 import ipywidgets
@@ -177,8 +176,7 @@ def load_polygons(
     left_polygon: list[PassPolygon] = []
     right_polygon: list[PassPolygon] = []
 
-    orbit_file = pathlib.Path(__file__).parent / mission_properties.orbit_file
-    with xarray.open_dataset(orbit_file.resolve(),
+    with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         for ix in index:
             left_polygon.append(
@@ -224,8 +222,7 @@ def load_lines(mission_properties: models.MissionProperties,
 
     lines: list[PassLine] = []
 
-    orbit_file = pathlib.Path(__file__).parent / mission_properties.orbit_file
-    with xarray.open_dataset(orbit_file.resolve(),
+    with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         for ix in index:
             lines.append((ix + 1,

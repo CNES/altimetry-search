@@ -42,8 +42,7 @@ def calculate_cycle_axis(
     Returns:
         Temporal axis of the cycle.
     """
-    orf_file = pathlib.Path(__file__).parent / mission_properties.orf_file
-    cycles = orf.load_json(orf_file.resolve())
+    cycles = orf.load_json(pathlib.Path(mission_properties.orf_file))
 
     cycle_first_measurement = numpy.full(
         (200, ),
@@ -79,8 +78,7 @@ def get_selected_passes(
     elif isinstance(mission, models.Mission):
         mission_properties = models.MissionPropertiesLoader().load(mission)
 
-    orbit_file = pathlib.Path(__file__).parent / mission_properties.orbit_file
-    with xarray.open_dataset(orbit_file.resolve(),
+    with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         passes_per_cycle = ds.sizes['pass_number']
 
@@ -171,8 +169,7 @@ def get_pass_passage_time(
         mission_properties = models.MissionPropertiesLoader().load(mission)
 
     passes = numpy.array(sorted(set(selected_passes['pass_number']))) - 1
-    orbit_file = pathlib.Path(__file__).parent / mission_properties.orbit_file
-    with xarray.open_dataset(orbit_file.resolve(),
+    with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         lon = ds.line_string_lon.values[passes, :]
         lat = ds.line_string_lat.values[passes, :]

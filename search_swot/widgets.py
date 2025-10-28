@@ -4,7 +4,6 @@
 # BSD-style license that can be found in the LICENSE file.
 """IPython widgets used by the application."""
 
-from typing import Any
 import base64
 from collections.abc import Callable
 import dataclasses
@@ -84,7 +83,7 @@ class DateSelection:
         """
         return ipywidgets.VBox([self.start_date, self.last_date])
 
-    def values(self) -> tuple[numpy.datetime64[Any], numpy.timedelta64]:
+    def values(self) -> tuple[numpy.datetime64, numpy.timedelta64]:
         """Return the values of the widget.
 
         Returns:
