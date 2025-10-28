@@ -4,6 +4,7 @@
 # BSD-style license that can be found in the LICENSE file.
 """IPython widgets used by the application."""
 
+from typing import Any
 import base64
 from collections.abc import Callable
 import dataclasses
@@ -83,16 +84,15 @@ class DateSelection:
         """
         return ipywidgets.VBox([self.start_date, self.last_date])
 
-    def values(self) -> tuple[numpy.datetime64, numpy.timedelta64]:
+    def values(self) -> tuple[numpy.datetime64[Any], numpy.timedelta64]:
         """Return the values of the widget.
 
         Returns:
             First date and search duration.
         """
-        duration = numpy.datetime64(self.last_date.value) - numpy.datetime64(
-            self.start_date.value)
-        return numpy.datetime64(self.start_date.value), numpy.timedelta64(
-            duration, 's')
+        return numpy.datetime64(self.start_date.value), numpy.datetime64(
+            self.last_date.value) - numpy.datetime64(
+                self.start_date.value)  # type: ignore[return-value]
 
 
 def _setup_draw_control(
@@ -189,8 +189,11 @@ class MapSelection:
     # Widget to choose a mission
     mission_widget: ipywidgets.Dropdown = dataclasses.field(
         default_factory=lambda: ipywidgets.Dropdown(
-            options=[(member.value, member) for member in models.Mission],
-            description='Mission:'))
+            options=[('--- Select a mission ---', None)] +
+            [(member.value, member) for member in models.Mission],
+            description='Mission:',
+            value=None,
+        ))
 
     def __post_init__(self) -> None:
         self.draw_control = _setup_draw_control(self.handle_draw)
@@ -206,8 +209,9 @@ class MapSelection:
             width='800px'))
 
     def mission_widget_callback(self, change):
-        self.delete_last_selection()
-        self.draw_control.clear_polygons()
+        if not (change['old'] is None or self.mission_widget.value is None):
+            self.delete_last_selection()
+            self.draw_control.clear_polygons()
 
     def display(self) -> ipywidgets.Widget:
         """Display the widget.
@@ -330,6 +334,10 @@ class MapSelection:
             with self.out:
                 IPython.display.display('Computing...')
 
+            if self.mission_widget.value is None:
+                self.display_message('Please select a mission.')
+                return
+
             mission_properties = models.MissionPropertiesLoader().load(
                 self.mission_widget.value)
 
@@ -404,26 +412,28 @@ class MapSelection:
 def compute_selected_passes(
         selected_area: pyinterp.geodetic.Polygon, first_date: numpy.datetime64,
         search_duration: numpy.timedelta64,
-        mission_properties: models.MissionProperties) -> pandas.DataFrame:
+        mission: models.Mission | models.MissionProperties
+) -> pandas.DataFrame:
     """Compute the selected passes.
 
     Args:
         selected_area: selected area
         first_date: selected first date
         search_duration: search duration
-        mission_properties: selected mission's properties
+        mission: selected mission (or mission's properties)
 
     Returns:
         Selected passes.
     """
+    if isinstance(mission, models.Mission):
+        mission = models.MissionPropertiesLoader().load(mission)
     if selected_area is None:
         raise ValueError('No area selected.')
     if search_duration < numpy.timedelta64(0, 'D'):  # type: ignore
         raise InvalidDate('First date must be before last date.')
-    selected_passes = orbit.get_selected_passes(mission_properties, first_date,
+    selected_passes = orbit.get_selected_passes(mission, first_date,
                                                 search_duration)
-    pass_passage_time = orbit.get_pass_passage_time(mission_properties,
-                                                    selected_passes,
+    pass_passage_time = orbit.get_pass_passage_time(mission, selected_passes,
                                                     selected_area)
     selected_passes = selected_passes.join(
         pass_passage_time.set_index('pass_number'),

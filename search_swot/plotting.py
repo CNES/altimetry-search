@@ -156,17 +156,22 @@ def _load_one_polygon(x: NDArray, y: NDArray) -> pyinterp.geodetic.Polygon:
 
 
 def load_polygons(
-        mission_properties: models.MissionProperties,
+        mission: models.Mission | models.MissionProperties,
         pass_number: NDArray) -> tuple[list[PassPolygon], list[PassPolygon]]:
     """Load the polygons of the selected passes.
 
     Args:
-        mission_properties: Selected mission's properties
+        mission: A mission (or mission's properties)
         pass_number: Pass numbers to load.
 
     Returns:
         Left and right polygons of the selected passes.
     """
+    if isinstance(mission, models.MissionProperties):
+        mission_properties = mission
+    elif isinstance(mission, models.Mission):
+        mission_properties = models.MissionPropertiesLoader().load(mission)
+
     index = pass_number - 1
 
     left_polygon: list[PassPolygon] = []
@@ -293,11 +298,11 @@ def plot_line(
     (lons, lats) = _get_lons_lats(outer, east)
 
     color_id = pass_number % len(COLORS)
-    layers[pass_number] = ipyleaflet.Polyline(locations=[
-        (y, x) for x, y in zip(lons, lats)
-    ],
-                                              color=COLORS[color_id],
-                                              fill=False)
+    layers[pass_number] = ipyleaflet.Polyline(
+        locations=[(y, x) for x, y in zip(lons, lats)],
+        color=COLORS[color_id],
+        fill=False,
+    )
 
     # Add a marker to display the pass number on the map if it does not already
     # exist.

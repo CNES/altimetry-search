@@ -14,19 +14,18 @@ class MissionType(Enum):
 
 @dataclasses.dataclass
 class MissionProperties:
-    mission_type: MissionType = MissionType.SWATH
+    mission_type: MissionType | None = None
     orf_file: str = dataclasses.field(default_factory=str)
     orbit_file: str = dataclasses.field(default_factory=str)
-    passes_per_cycle: int = dataclasses.field(default_factory=int)
 
 
 missions_properties = {
     Mission.SWOT_SWATH:
     MissionProperties(MissionType.SWATH, 'resources/SWOT_ORF.json',
-                      'resources/SWOT_orbit.nc', 584),
+                      'resources/SWOT_orbit.nc'),
     Mission.SWOT_NADIR:
     MissionProperties(MissionType.NADIR, 'resources/SWOT_ORF.json',
-                      'resources/SWOT_orbit.nc', 584)
+                      'resources/SWOT_orbit.nc')
 }
 
 
