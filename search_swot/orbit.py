@@ -78,6 +78,11 @@ def get_selected_passes(
     elif isinstance(mission, models.Mission):
         mission_properties = models.MissionPropertiesLoader().load(mission)
 
+    # To avoid getting a warning from xarray about decoding timedeltas, we set
+    # decode_timedelta to True. The warning appears because orbit files do not
+    # have the appropriate attributes to decode timedeltas.
+    # TODO rewrite the auxiliary data with the proper encoding
+    # (dtype='timedelta64[ns]')
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         passes_per_cycle = ds.sizes['pass_number']
@@ -169,6 +174,12 @@ def get_pass_passage_time(
         mission_properties = models.MissionPropertiesLoader().load(mission)
 
     passes = numpy.array(sorted(set(selected_passes['pass_number']))) - 1
+
+    # To avoid getting a warning from xarray about decoding timedeltas, we set
+    # decode_timedelta to True. The warning appears because orbit files do not
+    # have the appropriate attributes to decode timedeltas.
+    # TODO rewrite the auxiliary data with the proper encoding
+    # (dtype='timedelta64[ns]')
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         lon = ds.line_string_lon.values[passes, :]

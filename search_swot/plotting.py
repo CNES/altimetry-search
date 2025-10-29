@@ -176,6 +176,11 @@ def load_polygons(
     left_polygon: list[PassPolygon] = []
     right_polygon: list[PassPolygon] = []
 
+    # To avoid getting a warning from xarray about decoding timedeltas, we set
+    # decode_timedelta to True. The warning appears because orbit files do not
+    # have the appropriate attributes to decode timedeltas.
+    # TODO rewrite the auxiliary data with the proper encoding
+    # (dtype='timedelta64[ns]')
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         for ix in index:
@@ -222,6 +227,11 @@ def load_lines(mission_properties: models.MissionProperties,
 
     lines: list[PassLine] = []
 
+    # To avoid getting a warning from xarray about decoding timedeltas, we set
+    # decode_timedelta to True. The warning appears because orbit files do not
+    # have the appropriate attributes to decode timedeltas.
+    # TODO rewrite the auxiliary data with the proper encoding
+    # (dtype='timedelta64[ns]')
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         for ix in index:
