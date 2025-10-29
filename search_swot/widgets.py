@@ -3,7 +3,6 @@
 # All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
 """IPython widgets used by the application."""
-from __future__ import annotations
 
 import base64
 from collections.abc import Callable
@@ -15,58 +14,13 @@ import IPython.display
 import ipyleaflet
 import ipywidgets
 import numpy
-from numpy.typing import NDArray
 import pandas
 import pyinterp.geodetic
-import xarray
 
-from . import orbit
+from . import models, orbit, plotting
 
 #: Default bounds of the map
 DEFAULT_BOUNDS = ((-180, -90), (180, 90))
-
-# List of HTML colors
-COLORS: list[str] = [
-    'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beiae',
-    'bisque', 'black', 'blanchedalmond', 'blue', 'blueviolet', 'brown',
-    'burlywood', 'cadetblue', 'chartreuse', 'chocolate', 'coral',
-    'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan',
-    'darkgoldenrod', 'darkgray', 'darkgrey', 'darkgreen', 'darkkhaki',
-    'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid', 'darkred',
-    'darksalmon', 'darkseagreen', 'darkslateblue', 'darkslategray',
-    'darkslategrey', 'darkturquoise', 'darkviolet', 'deeppink', 'deepskyblue',
-    'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite',
-    'forestgreen', 'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod',
-    'gray', 'grey', 'green', 'greenyellow', 'honeydew', 'hotpink',
-    'indianred ', 'indigo ', 'ivory', 'khaki', 'lavender', 'lavenderblush',
-    'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan',
-    'lightgoldenrodyellow', 'lightgray', 'lightgrey', 'lightgreen',
-    'lightpink', 'lightsalmon', 'lightseagreen', 'lightskyblue',
-    'lightslategray', 'lightslategrey', 'lightsteelblue', 'lightyellow',
-    'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine',
-    'mediumblue', 'mediumorchid', 'mediumpurple', 'mediumseagreen',
-    'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
-    'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose', 'moccasin',
-    'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab', 'orange',
-    'orangered', 'orchid', 'palegoldenrod', 'palegreen', 'paleturquoise',
-    'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink', 'plum',
-    'powderblue', 'purple', 'rebeccapurple', 'red', 'rosybrown', 'royalblue',
-    'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'seashell', 'sienna',
-    'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow',
-    'springgreen', 'steelblue', 'tan', 'teal', 'thistle', 'tomato',
-    'transparent', 'turquoise', 'violet', 'wheat', 'white', 'whitesmoke',
-    'yellow', 'yellowgreen'
-]
-
-#: HTML Template for the popup of the marker
-POPUP_TEMPLATE = """
-<div style="text-align: center; font-weight: bold;">
-    <div style="display: inline-block; width: 10px; height: 10px;
-    border: 1px solid black; background-color: {color};
-    margin-right: 5px;"></div>
-    Pass {pass_number}
-</div>
-"""
 
 #: HTML Template for the popup of the marker
 DOWNLOAD_TEMPLATE = """<a href="data:file/csv;base64,{b64}"
@@ -85,27 +39,13 @@ zoom in and out and wheel mouse to zoom in and out. Once you have selected the
 area of interest, click on the
 <span style="background-color: lightgray;"><code>Search</code></span> button to
 search for {mission} passes. The results are displayed in the table below and
-the swaths that intersect the area of interest are displayed on the map. Click
-on the marker to view the pass number.<br>
+the half_orbits that intersect the area of interest are displayed on the map.
+Click on the marker to view the pass number.<br>
 You can draw multiple bounding boxes, but only the last one will be used for
 the search. You can also delete one or all bounding boxes by clicking on the
 <span style="background-color: lightgray;"><code>trash</code></span> icon.<br>
-At the top right side of the map, you can select the period of interest.
-The default period is the last 1 day.</p>"""
-
-#: Type of a pass polygon
-PassPolygon = tuple[int, pyinterp.geodetic.Polygon]
-
-
-@dataclasses.dataclass
-class Swath:
-    """Swath definition."""
-    #: Left polygon of the swath
-    left: ipyleaflet.Polygon
-    #: Right polygon of the swath
-    right: ipyleaflet.Polygon
-    #: Marker of the swath to display the pass number
-    marker: ipyleaflet.Marker
+At the top right side of the map, you can select the period of interest, and the
+mission. The default period is the last 1 day.</p>"""
 
 
 class InvalidDate(Exception):
@@ -150,15 +90,38 @@ class DateSelection:
             First date and search duration.
         """
         return numpy.datetime64(self.start_date.value), numpy.datetime64(
-            self.last_date.value) - numpy.datetime64(self.start_date.value)
+            self.last_date.value) - numpy.datetime64(
+                self.start_date.value)  # type: ignore[return-value]
 
 
-def _setup_map(
-    date_selection: DateSelection,
-    help: ipywidgets.Button,
-    search: ipywidgets.Button,
-    on_draw: Callable[[ipywidgets.Widget, str, dict], None],
-) -> ipyleaflet.Map:
+def _setup_draw_control(
+    on_draw: Callable[[ipywidgets.Widget, str, dict],
+                      None]) -> ipyleaflet.Control:
+    """Setup the map.
+
+    Args:
+        on_draw: Callback called when the user draws a rectangle.
+
+    Returns:
+        Map widget.
+    """
+    draw_control = ipyleaflet.DrawControl()
+    draw_control.polyline = {}
+    draw_control.polygon = {}
+    draw_control.circlemarker = {}
+    draw_control.rectangle = {'shapeOptions': {'color': '#0000FF'}}
+    draw_control.circle = {}
+    draw_control.edit = False
+
+    draw_control.on_draw(on_draw)
+
+    return draw_control
+
+
+def _setup_map(date_selection: DateSelection,
+               mission_widget: ipywidgets.Dropdown, help: ipywidgets.Button,
+               search: ipywidgets.Button,
+               draw_control: ipyleaflet.DrawControl) -> ipyleaflet.Map:
     """Setup the map.
 
     Args:
@@ -172,14 +135,6 @@ def _setup_map(
     """
     layout = ipywidgets.Layout(width='100%', height='600px')
 
-    draw_control = ipyleaflet.DrawControl()
-    draw_control.polyline = {}
-    draw_control.polygon = {}
-    draw_control.circlemarker = {}
-    draw_control.rectangle = {'shapeOptions': {'color': '#0000FF'}}
-    draw_control.circle = {}
-    draw_control.edit = False
-
     m = ipyleaflet.Map(center=[0, 0],
                        zoom=2,
                        layout=layout,
@@ -188,26 +143,28 @@ def _setup_map(
     m.add_control(ipyleaflet.FullScreenControl())
     m.add_control(draw_control)
     m.add_control(
+        ipyleaflet.WidgetControl(widget=mission_widget, position='topright'))
+    m.add_control(
         ipyleaflet.WidgetControl(widget=date_selection.display(),
                                  position='topright'))
     m.add_control(
         ipyleaflet.WidgetControl(widget=search, position='bottomright'))
-    draw_control.on_draw(on_draw)
     m.add_control(ipyleaflet.WidgetControl(widget=help, position='bottomleft'))
     return m
 
 
 @dataclasses.dataclass
 class MapSelection:
-    """Map selection widget."""
+    """Map selection."""
     #: Selected area
     selection: pyinterp.geodetic.Polygon | None = None
     #: Bounds of the selected area
     bounds: tuple[tuple[float, float],
                   tuple[float, float]] = dataclasses.field(
                       default_factory=lambda: DEFAULT_BOUNDS)
-    #: Swaths to display
-    swaths: list[Swath] = dataclasses.field(default_factory=list)
+    #: HalfOrbit footprint to display
+    half_orbits: list[plotting.HalfOrbitFootprint] = dataclasses.field(
+        default_factory=list)
     #: Date selection widget
     date_selection: DateSelection = dataclasses.field(
         default_factory=DateSelection)
@@ -219,6 +176,8 @@ class MapSelection:
         default_factory=lambda: ipywidgets.Button(description='Help'))
     #: Map widget
     m: ipyleaflet.Map = dataclasses.field(init=False)
+    # Draw control of the map
+    draw_control: ipyleaflet.DrawControl = dataclasses.field(init=False)
     #: Output widget
     out: ipywidgets.Output = dataclasses.field(
         default_factory=ipywidgets.Output)
@@ -226,16 +185,32 @@ class MapSelection:
     main_widget: ipywidgets.VBox = dataclasses.field(init=False)
     #: Widget to display a message (information or error)
     widget_message: ipywidgets.VBox | None = None
+    # Widget to choose a mission
+    mission_widget: ipywidgets.Dropdown = dataclasses.field(
+        default_factory=lambda: ipywidgets.Dropdown(
+            options=[('--- Select a mission ---', None)] +
+            [(member.value, member) for member in models.Mission],
+            description='Mission:',
+            value=None,
+        ))
 
     def __post_init__(self) -> None:
-        self.m = _setup_map(self.date_selection, self.help, self.search,
-                            self.handle_draw)
+        self.draw_control = _setup_draw_control(self.handle_draw)
+        self.m = _setup_map(self.date_selection, self.mission_widget,
+                            self.help, self.search, self.draw_control)
         self.main_widget = ipywidgets.VBox([self.m, self.out])
         self.search.on_click(self.handle_compute)
+        self.mission_widget.observe(self.mission_widget_callback,
+                                    names='value')
         self.help.on_click(lambda _args: self.display_message(
-            HTML_HELP.format(mission='SWOT'),
+            HTML_HELP.format(mission=self.mission_widget.value),
             button_style='info',
             width='800px'))
+
+    def mission_widget_callback(self, change):
+        if not (change['old'] is None or self.mission_widget.value is None):
+            self.delete_last_selection()
+            self.draw_control.clear_polygons()
 
     def display(self) -> ipywidgets.Widget:
         """Display the widget.
@@ -251,18 +226,17 @@ class MapSelection:
         self.widget_message = None
         self.search.disabled = False
 
-    def remove_swaths(self) -> None:
-        """Remove the swaths from the map."""
-        for item in self.swaths:
-            self.m.remove(item.left)
-            self.m.remove(item.right)
-            self.m.remove(item.marker)
-        self.swaths.clear()
+    def remove_half_orbit_footprints(self) -> None:
+        """Remove the half_orbits from the map."""
+        for item in self.half_orbits:
+            for v in vars(item):
+                self.m.remove(getattr(item, v))
+        self.half_orbits.clear()
         self.out.clear_output()
 
     def delete_last_selection(self) -> None:
         """Delete the last selection."""
-        self.remove_swaths()
+        self.remove_half_orbit_footprints()
         self.selection = None
         self.bounds = DEFAULT_BOUNDS
 
@@ -351,17 +325,28 @@ class MapSelection:
                         'map, then click on the <b>Search</b> button.')
                 return
 
-            # Remove the last swaths displayed on the map.
-            self.remove_swaths()
+            # Remove the last half_orbits displayed on the map.
+            self.remove_half_orbit_footprints()
 
             # Display a message to inform the user that the computation is in
             # progress.
             with self.out:
                 IPython.display.display('Computing...')
 
+            if self.mission_widget.value is None:
+                self.display_message('Please select a mission.')
+                return
+
+            mission_properties = models.MissionPropertiesLoader().load(
+                self.mission_widget.value)
+
+            first_date, search_duration = self.date_selection.values()
+
             # Compute the selected passes.
-            selected_passes = compute_selected_passes(self.date_selection,
-                                                      self)
+            selected_passes = compute_selected_passes(self.selection,
+                                                      first_date,
+                                                      search_duration,
+                                                      mission_properties)
 
             # If no pass is found, display a message and return.
             if len(selected_passes) == 0:
@@ -372,8 +357,10 @@ class MapSelection:
                     button_style='warning')
                 return
 
-            # Plot the swaths on the map.
-            self.swaths = plot_selected_passes(self, selected_passes)
+            # Plot the half_orbits on the map.
+            self.half_orbits = plotting.plot_selected_passes(
+                self.selection, mission_properties, self.bounds[0][0],
+                selected_passes)
 
             # Rename the columns of the DataFrame to display them in the
             # output widget.
@@ -387,11 +374,10 @@ class MapSelection:
                 inplace=True,
             )
 
-            # Draw the swaths on the map.
-            for item in self.swaths:
-                self.m.add_layer(item.left)
-                self.m.add_layer(item.right)
-                self.m.add_layer(item.marker)
+            # Draw the half_orbits on the map.
+            for item in self.half_orbits:
+                for v in vars(item):
+                    self.m.add_layer(getattr(item, v))
 
             # Finally, display the DataFrame in the output widget.
             self.out.clear_output()
@@ -422,98 +408,32 @@ class MapSelection:
         # pylint: enable=broad-exception-caught,broad-exception-caught
 
 
-@dataclasses.dataclass(frozen=True)
-class MainWidget:
-    """Main widget."""
-    #: Map selection widget
-    map_selection: MapSelection = dataclasses.field(
-        default_factory=MapSelection)
-    #: Date selection widget
-    date_selection: DateSelection = dataclasses.field(
-        default_factory=DateSelection)
-    #: Main widget
-    main_widget: ipywidgets.HBox = dataclasses.field(init=False)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self, 'main_widget',
-            ipywidgets.HBox(
-                [self.map_selection.display(),
-                 self.date_selection.display()]))
-
-    def display(self) -> ipywidgets.Widget:
-        """Display the widget.
-
-        Returns:
-            Widget to display.
-        """
-        return self.main_widget
-
-
-def _load_one_polygons(x: NDArray, y: NDArray) -> pyinterp.geodetic.Polygon:
-    """Load a polygon from a set of coordinates.
-
-    Args:
-        x: X coordinates.
-        y: Y coordinates.
-
-    Returns:
-        Polygon.
-    """
-    m = numpy.isfinite(x) & numpy.isfinite(y)
-    x = x[m]
-    y = y[m]
-    return pyinterp.geodetic.Polygon(
-        [pyinterp.geodetic.Point(x, y) for x, y in zip(x, y)])
-
-
-def load_polygons(
-        pass_number: NDArray) -> tuple[list[PassPolygon], list[PassPolygon]]:
-    """Load the polygons of the selected passes.
-
-    Args:
-        pass_number: Pass numbers to load.
-
-    Returns:
-        Left and right polygons of the selected passes.
-    """
-    index = pass_number - 1
-
-    left_polygon: list[PassPolygon] = []
-    right_polygon: list[PassPolygon] = []
-
-    with xarray.open_dataset(orbit.DATASET) as ds:
-        for ix in index:
-            left_polygon.append(
-                (ix + 1,
-                 _load_one_polygons(ds.left_polygon_lon[ix, :].values,
-                                    ds.left_polygon_lat[ix, :].values)))
-            right_polygon.append(
-                (ix + 1,
-                 _load_one_polygons(ds.right_polygon_lon[ix, :].values,
-                                    ds.right_polygon_lat[ix, :].values)))
-    return left_polygon, right_polygon
-
-
-def compute_selected_passes(date_selection: DateSelection,
-                            map_selection: MapSelection) -> pandas.DataFrame:
+def compute_selected_passes(
+        selected_area: pyinterp.geodetic.Polygon, first_date: numpy.datetime64,
+        search_duration: numpy.timedelta64,
+        mission: models.Mission | models.MissionProperties
+) -> pandas.DataFrame:
     """Compute the selected passes.
 
     Args:
-        date_selection: Date selection widget.
-        map_selection: Map selection widget.
+        selected_area: selected area
+        first_date: selected first date
+        search_duration: search duration
+        mission: selected mission (or mission's properties)
 
     Returns:
         Selected passes.
     """
-    if map_selection.selection is None:
+    if isinstance(mission, models.Mission):
+        mission = models.MissionPropertiesLoader().load(mission)
+    if selected_area is None:
         raise ValueError('No area selected.')
-    first_date, search_duration = date_selection.values()
     if search_duration < numpy.timedelta64(0, 'D'):  # type: ignore
         raise InvalidDate('First date must be before last date.')
-    selected_passes = orbit.get_selected_passes(first_date, search_duration)
-    pass_passage_time = orbit.get_pass_passage_time(selected_passes,
-                                                    map_selection.selection)
+    selected_passes = orbit.get_selected_passes(mission, first_date,
+                                                search_duration)
+    pass_passage_time = orbit.get_pass_passage_time(mission, selected_passes,
+                                                    selected_area)
     selected_passes = selected_passes.join(
         pass_passage_time.set_index('pass_number'),
         on='pass_number',
@@ -529,92 +449,3 @@ def compute_selected_passes(date_selection: DateSelection,
         'last_measurement'].dt.floor('s')
     selected_passes.reset_index(drop=True, inplace=True)
     return selected_passes
-
-
-def plot_swath(
-    pass_number: int,
-    item: pyinterp.geodetic.Polygon,
-    bbox: pyinterp.geodetic.Polygon,
-    layers: dict[int, ipyleaflet.Polygon],
-    markers: dict[int, ipyleaflet.Marker],
-    east: float,
-) -> None:
-    """Plot a swath.
-
-    Args:
-        pass_number: Pass number.
-        item: Polygon to plot.
-        bbox: Bounding box of the selected area.
-        layers: Layers of the map.
-        markers: Markers of the map.
-        east: East longitude.
-    """
-    intersection = item.intersection(bbox)
-    if len(intersection) == 0:
-        return
-    outer = intersection[0].outer
-
-    lons = numpy.array([p.lon for p in outer])
-    lats = numpy.array([p.lat for p in outer])
-    lons = numpy.deg2rad(
-        pyinterp.geodetic.normalize_longitudes(
-            numpy.array([p.lon for p in outer]), east))
-    lons = numpy.unwrap(lons, discont=numpy.pi)
-    lons = numpy.rad2deg(lons)
-
-    color_id = pass_number % len(COLORS)
-    layers[pass_number] = ipyleaflet.Polygon(
-        locations=[(y, x) for x, y in zip(lons, lats)],
-        color=COLORS[color_id],
-        fill_color=COLORS[color_id],
-    )
-
-    # Add a marker to display the pass number on the map if it does not already
-    # exist.
-    if pass_number not in markers:
-        size = lons.size // 8
-        index = max(size, 0) if pass_number % 2 == 0 else min(
-            size * 7, size - 1)
-        marker = ipyleaflet.Marker(location=(lats[index], lons[index]))
-        marker.draggable = False
-        marker.opacity = 0.8
-        marker.popup = ipywidgets.HTML(
-            POPUP_TEMPLATE.format(color=COLORS[color_id],
-                                  pass_number=pass_number))
-        markers[pass_number] = marker
-
-
-def plot_selected_passes(map_selection: MapSelection,
-                         df: pandas.DataFrame) -> list[Swath]:
-    """Plot the selected passes.
-
-    Args:
-        map_selection: Map selection widget.
-        df: Selected passes.
-
-    Returns:
-        The swaths plotted on the map.
-    """
-    polygon = map_selection.selection
-    bbox: pyinterp.geodetic.Polygon = (  # type: ignore[assignment]
-        polygon if polygon is not None else
-        pyinterp.geodetic.Box.whole_earth().as_polygon())
-
-    (left_swath, right_swath) = load_polygons(
-        df['pass_number'].values)  # type: ignore[arg-type]
-
-    left_layers: dict[int, ipyleaflet.Polygon] = {}
-    right_layers: dict[int, ipyleaflet.Polygon] = {}
-    markers: dict[int, ipyleaflet.Marker] = {}
-    east = map_selection.bounds[0][0]
-    tuple(
-        map(lambda x: plot_swath(*x, bbox, left_layers, markers, east),
-            left_swath))
-    tuple(
-        map(lambda x: plot_swath(*x, bbox, right_layers, markers, east),
-            right_swath))
-    return [
-        Swath(left=left_layers.get(pass_number, ipyleaflet.Polygon()),
-              right=right_layers.get(pass_number, ipyleaflet.Polygon()),
-              marker=marker) for pass_number, marker in markers.items()
-    ]

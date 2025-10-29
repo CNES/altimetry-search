@@ -2,7 +2,7 @@
 #
 # All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
-"""Calculate the ephemeredes of the SWOT satellite."""
+"""Calculate the ephemeredes of satellites."""
 from __future__ import annotations
 
 import pathlib
@@ -13,16 +13,7 @@ import pandas
 import pyinterp
 import xarray
 
-from . import orf
-
-#: Orbit Repetition File
-ORF = pathlib.Path(__file__).parent / 'SWOT_ORF.json'
-
-#: Orbit File
-DATASET = pathlib.Path(__file__).parent / 'SWOT_orbit.nc'
-
-#: Number of passes per cycle
-PASSES_PER_CYCLE = 584
+from . import models, orf
 
 
 def get_cycle_duration(dataset: xarray.Dataset) -> numpy.timedelta64:
@@ -40,16 +31,18 @@ def get_cycle_duration(dataset: xarray.Dataset) -> numpy.timedelta64:
 
 
 def calculate_cycle_axis(
-        cycle_duration: numpy.timedelta64) -> pyinterp.TemporalAxis:
+        cycle_duration: numpy.timedelta64,
+        mission_properties: models.MissionProperties) -> pyinterp.TemporalAxis:
     """Calculate the cycle axis.
 
     Args:
-        cycle_duration: Duration of a cycle
+        cycle_duration: Duration of a cycle.
+        mission_properties: Selected mission's properties.
 
     Returns:
         Temporal axis of the cycle.
     """
-    cycles = orf.load_json(ORF)
+    cycles = orf.load_json(pathlib.Path(mission_properties.orf_file))
 
     cycle_first_measurement = numpy.full(
         (200, ),
@@ -67,28 +60,43 @@ def calculate_cycle_axis(
 
 
 def get_selected_passes(
+        mission: models.Mission | models.MissionProperties,
         date: numpy.datetime64,
         search_duration: numpy.timedelta64 | None = None) -> pandas.DataFrame:
     """Return the selected passes.
 
     Args:
+        mission: Selected mission (or mission's properties)
         date: Date of the first pass.
         search_duration: Duration of the search.
 
     Returns:
         Temporal axis of the selected passes.
     """
-    with xarray.open_dataset(DATASET.resolve()) as ds:
+    if isinstance(mission, models.MissionProperties):
+        mission_properties = mission
+    elif isinstance(mission, models.Mission):
+        mission_properties = models.MissionPropertiesLoader().load(mission)
+
+    # To avoid getting a warning from xarray about decoding timedeltas, we set
+    # decode_timedelta to True. The warning appears because orbit files do not
+    # have the appropriate attributes to decode timedeltas.
+    # TODO rewrite the auxiliary data with the proper encoding
+    # (dtype='timedelta64[ns]')
+    with xarray.open_dataset(mission_properties.orbit_file,
+                             decode_timedelta=True) as ds:
+        passes_per_cycle = ds.sizes['pass_number']
+
         cycle_duration = get_cycle_duration(ds)
         search_duration = search_duration or cycle_duration
-        axis = calculate_cycle_axis(cycle_duration)
+        axis = calculate_cycle_axis(cycle_duration, mission_properties)
         dates = numpy.array([date, date + search_duration])
         indices = axis.find_indexes(dates).ravel()
         cycle_numbers = numpy.repeat(
-            numpy.arange(indices[0], indices[-1]) + 1, PASSES_PER_CYCLE)
+            numpy.arange(indices[0], indices[-1]) + 1, passes_per_cycle)
         axis_slice = axis[indices[0]:indices[-1] + 1]
-        first_date_of_cycle = numpy.repeat(axis_slice, PASSES_PER_CYCLE)
-        pass_numbers = numpy.tile(numpy.arange(1, PASSES_PER_CYCLE + 1),
+        first_date_of_cycle = numpy.repeat(axis_slice, passes_per_cycle)
+        pass_numbers = numpy.tile(numpy.arange(1, passes_per_cycle + 1),
                                   indices[-1] - indices[0])
         dates_of_selected_passes = numpy.vstack(
             (ds.start_time.values, ) * len(axis_slice)).T + axis_slice
@@ -147,19 +155,33 @@ def _get_time_bounds(
 
 
 def get_pass_passage_time(
+        mission: models.Mission | models.MissionProperties,
         selected_passes: pandas.DataFrame,
         polygon: pyinterp.geodetic.Polygon | None) -> pandas.DataFrame:
     """Return the passage time of the selected passes.
 
     Args:
+        mission: Selected mission (or mission's properties)
         selected_passes: Selected passes.
         polygon: Polygon used to select the passes.
 
     Returns:
         Passage time of the selected passes.
     """
+    if isinstance(mission, models.MissionProperties):
+        mission_properties = mission
+    elif isinstance(mission, models.Mission):
+        mission_properties = models.MissionPropertiesLoader().load(mission)
+
     passes = numpy.array(sorted(set(selected_passes['pass_number']))) - 1
-    with xarray.open_dataset(DATASET) as ds:
+
+    # To avoid getting a warning from xarray about decoding timedeltas, we set
+    # decode_timedelta to True. The warning appears because orbit files do not
+    # have the appropriate attributes to decode timedeltas.
+    # TODO rewrite the auxiliary data with the proper encoding
+    # (dtype='timedelta64[ns]')
+    with xarray.open_dataset(mission_properties.orbit_file,
+                             decode_timedelta=True) as ds:
         lon = ds.line_string_lon.values[passes, :]
         lat = ds.line_string_lat.values[passes, :]
         pass_time = ds.pass_time.values[passes, :]
