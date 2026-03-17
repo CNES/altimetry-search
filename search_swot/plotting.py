@@ -5,7 +5,7 @@ import ipywidgets
 import numpy
 from numpy.typing import NDArray
 import pandas
-import pyinterp.geodetic
+from pyinterp.geometry import geographic
 import xarray
 
 from . import models
@@ -77,11 +77,11 @@ class NadirFootprint(HalfOrbitFootprint):
 
 
 #: Type of a pass polygon/line
-PassPolygon = tuple[int, pyinterp.geodetic.Polygon]
-PassLine = tuple[int, pyinterp.geodetic.LineString]
+PassPolygon = tuple[int, geographic.Polygon]
+PassLine = tuple[int, geographic.LineString]
 
 
-def plot_selected_passes(selected_area: pyinterp.geodetic.Polygon,
+def plot_selected_passes(selected_area: geographic.Polygon,
                          mission_properties: models.MissionProperties,
                          east: float,
                          df: pandas.DataFrame) -> list[HalfOrbitFootprint]:
@@ -96,9 +96,9 @@ def plot_selected_passes(selected_area: pyinterp.geodetic.Polygon,
     Returns:
         The half_orbits plotted on the map.
     """
-    bbox: pyinterp.geodetic.Polygon = (  # type: ignore[assignment]
+    bbox: geographic.Polygon = (  # type: ignore[assignment]
         selected_area if selected_area is not None else
-        pyinterp.geodetic.Box.whole_earth().as_polygon())
+        geographic.Box.whole_earth().as_polygon())
 
     markers: dict[int, ipyleaflet.Marker] = {}
 
@@ -137,7 +137,7 @@ def plot_selected_passes(selected_area: pyinterp.geodetic.Polygon,
     ]
 
 
-def _load_one_polygon(x: NDArray, y: NDArray) -> pyinterp.geodetic.Polygon:
+def _load_one_polygon(x: NDArray, y: NDArray) -> geographic.Polygon:
     """Load a polygon from a set of coordinates.
 
     Args:
@@ -150,8 +150,11 @@ def _load_one_polygon(x: NDArray, y: NDArray) -> pyinterp.geodetic.Polygon:
     m = numpy.isfinite(x) & numpy.isfinite(y)
     x = x[m]
     y = y[m]
-    return pyinterp.geodetic.Polygon(
-        [pyinterp.geodetic.Point(x, y) for x, y in zip(x, y)])
+    return geographic.Polygon(
+        geographic.Ring(
+            numpy.array(x, dtype=numpy.float64),
+            numpy.array(y, dtype=numpy.float64),
+        ))
 
 
 def load_polygons(
@@ -195,7 +198,7 @@ def load_polygons(
     return left_polygon, right_polygon
 
 
-def _load_one_line(x: NDArray, y: NDArray) -> pyinterp.geodetic.LineString:
+def _load_one_line(x: NDArray, y: NDArray) -> geographic.LineString:
     """Load a line from a set of coordinates.
 
     Args:
@@ -206,10 +209,10 @@ def _load_one_line(x: NDArray, y: NDArray) -> pyinterp.geodetic.LineString:
         LineString.
     """
     m = numpy.isfinite(x) & numpy.isfinite(y)
-    x = x[m]
-    y = y[m]
-    return pyinterp.geodetic.LineString(
-        [pyinterp.geodetic.Point(x, y) for x, y in zip(x, y)])
+    return geographic.LineString(
+        x[m].astype(numpy.float64),
+        y[m].astype(numpy.float64),
+    )
 
 
 def load_lines(mission_properties: models.MissionProperties,
@@ -243,8 +246,8 @@ def load_lines(mission_properties: models.MissionProperties,
 
 def plot_swath(
     pass_number: int,
-    item: pyinterp.geodetic.Polygon,
-    bbox: pyinterp.geodetic.Polygon,
+    item: geographic.Polygon,
+    bbox: geographic.Polygon,
     layers: dict[int, ipyleaflet.Polygon],
     markers: dict[int, ipyleaflet.Marker],
     east: float,
@@ -259,10 +262,13 @@ def plot_swath(
         markers: Markers of the map.
         east: East longitude.
     """
-    intersection = item.intersection(bbox)
-    if len(intersection) == 0:
+    wgs84 = geographic.Spheroid()
+    intersection_list = geographic.algorithms.intersection(item,
+                                                           bbox,
+                                                           spheroid=wgs84)
+    if len(intersection_list) == 0:
         return
-    outer = intersection[0].outer
+    outer = intersection_list[0].outer
 
     (lons, lats) = _get_lons_lats(outer, east)
 
@@ -281,8 +287,8 @@ def plot_swath(
 
 def plot_line(
     pass_number: int,
-    item: pyinterp.geodetic.LineString,
-    bbox: pyinterp.geodetic.Polygon,
+    item: geographic.LineString,
+    bbox: geographic.Polygon,
     layers: dict[int, ipyleaflet.Polyline],
     markers: dict[int, ipyleaflet.Marker],
     east: float,
@@ -297,12 +303,14 @@ def plot_line(
         markers: Markers of the map.
         east: East longitude.
     """
-    intersection = item.intersection(bbox)
-    if len(intersection) == 0:
+    wgs84 = geographic.Spheroid()
+    intersection_list = geographic.algorithms.intersection(item,
+                                                           bbox,
+                                                           spheroid=wgs84)
+    if len(intersection_list) == 0:
         return
-    outer = intersection[0]
 
-    (lons, lats) = _get_lons_lats(outer, east)
+    (lons, lats) = _get_lons_lats(intersection_list[0], east)
 
     color_id = pass_number % len(COLORS)
     layers[pass_number] = ipyleaflet.Polyline(
@@ -317,12 +325,13 @@ def plot_line(
         _set_markers(markers, lons, lats, pass_number, color_id)
 
 
-def _get_lons_lats(outer: list[pyinterp.geodetic.Point], east: float):
+def _get_lons_lats(outer: list[geographic.Point], east: float):
     lons = numpy.array([p.lon for p in outer])
     lats = numpy.array([p.lat for p in outer])
     lons = numpy.deg2rad(
-        pyinterp.geodetic.normalize_longitudes(
-            numpy.array([p.lon for p in outer]), east))
+        (numpy.array([p.lon
+                      for p in outer], dtype=numpy.float64) - east) % 360.0 +
+        east)
     lons = numpy.unwrap(lons, discont=numpy.pi)
     lons = numpy.rad2deg(lons)
 

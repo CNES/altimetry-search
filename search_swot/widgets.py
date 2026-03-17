@@ -15,7 +15,7 @@ import ipyleaflet
 import ipywidgets
 import numpy
 import pandas
-import pyinterp.geodetic
+from pyinterp.geometry import geographic
 
 from . import models, orbit, plotting
 
@@ -157,7 +157,7 @@ def _setup_map(date_selection: DateSelection,
 class MapSelection:
     """Map selection."""
     #: Selected area
-    selection: pyinterp.geodetic.Polygon | None = None
+    selection: geographic.Polygon | None = None
     #: Bounds of the selected area
     bounds: tuple[tuple[float, float],
                   tuple[float, float]] = dataclasses.field(
@@ -269,11 +269,17 @@ class MapSelection:
             y0, y1 = y[0], y[1]
             xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
             self.bounds = ((min(x), min(y)), (max(x), max(y)))
-            points = [
-                pyinterp.geodetic.Point(item, y0) for item in reversed(xs)
-            ] + [pyinterp.geodetic.Point(item, y1) for item in xs]
-            points.append(points[0])
-            self.selection = pyinterp.geodetic.Polygon(points)
+            lons = list(reversed(xs)) + list(xs)
+            lats = [y0] * len(xs) + [y1] * len(xs)
+            # Close the polygon by adding the first
+            # point at the end of the list.
+            lons.append(lons[0])
+            lats.append(lats[0])
+            self.selection = geographic.Polygon(
+                geographic.Ring(
+                    numpy.array(lons, dtype=numpy.float64),
+                    numpy.array(lats, dtype=numpy.float64),
+                ))
         except (KeyError, IndexError):
             self.selection = None
 
@@ -409,7 +415,7 @@ class MapSelection:
 
 
 def compute_selected_passes(
-        selected_area: pyinterp.geodetic.Polygon, first_date: numpy.datetime64,
+        selected_area: geographic.Polygon, first_date: numpy.datetime64,
         search_duration: numpy.timedelta64,
         mission: models.Mission | models.MissionProperties
 ) -> pandas.DataFrame:

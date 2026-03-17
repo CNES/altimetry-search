@@ -10,7 +10,8 @@ import pathlib
 import numpy
 from numpy.typing import NDArray
 import pandas
-import pyinterp
+from pyinterp import TemporalAxis
+from pyinterp.geometry import geographic
 import xarray
 
 from . import models, orf
@@ -32,7 +33,7 @@ def get_cycle_duration(dataset: xarray.Dataset) -> numpy.timedelta64:
 
 def calculate_cycle_axis(
         cycle_duration: numpy.timedelta64,
-        mission_properties: models.MissionProperties) -> pyinterp.TemporalAxis:
+        mission_properties: models.MissionProperties) -> TemporalAxis:
     """Calculate the cycle axis.
 
     Args:
@@ -56,7 +57,7 @@ def calculate_cycle_axis(
     cycle_first_measurement[undefined] = numpy.full(
         (undefined.sum(), ), cycle_duration, dtype='m8[ns]') * numpy.arange(
             1, 1 + undefined.sum()) + cycles[keys[-1]]
-    return pyinterp.TemporalAxis(cycle_first_measurement)
+    return TemporalAxis(cycle_first_measurement)
 
 
 def get_selected_passes(
@@ -101,8 +102,8 @@ def get_selected_passes(
         dates_of_selected_passes = numpy.vstack(
             (ds.start_time.values, ) * len(axis_slice)).T + axis_slice
         dates_of_selected_passes = dates_of_selected_passes.T.ravel()
-        selected_passes = pyinterp.TemporalAxis(
-            dates_of_selected_passes).find_indexes(dates).ravel()
+        selected_passes = TemporalAxis(dates_of_selected_passes).find_indexes(
+            dates).ravel()
         size = selected_passes[-1] - selected_passes[0]
 
         result: numpy.ndarray = numpy.ndarray(
@@ -122,7 +123,7 @@ def get_selected_passes(
 def _get_time_bounds(
     lat_nadir: NDArray,
     selected_time: NDArray,
-    intersection: pyinterp.geodetic.LineString,
+    intersection: geographic.LineString,
 ) -> tuple[numpy.datetime64, numpy.datetime64]:
     """Return the time bounds of the selected pass.
 
@@ -157,7 +158,7 @@ def _get_time_bounds(
 def get_pass_passage_time(
         mission: models.Mission | models.MissionProperties,
         selected_passes: pandas.DataFrame,
-        polygon: pyinterp.geodetic.Polygon | None) -> pandas.DataFrame:
+        polygon: geographic.Polygon | None) -> pandas.DataFrame:
     """Return the passage time of the selected passes.
 
     Args:
@@ -194,22 +195,26 @@ def get_pass_passage_time(
     )
 
     jx = 0
+    wgs84 = geographic.Spheroid()
 
     for ix, pass_index in enumerate(passes):
-        line_string = pyinterp.geodetic.LineString([
-            pyinterp.geodetic.Point(x, y)
-            for x, y in zip(lon[ix, :], lat[ix, :])
-            if numpy.isfinite(x) and numpy.isfinite(y)
-        ])
-        intersection = polygon.intersection(
-            line_string) if polygon else line_string
-        if intersection:
+        mask = numpy.isfinite(lon[ix, :]) & numpy.isfinite(lat[ix, :])
+        line_string = geographic.LineString(
+            lon[ix, mask].astype(numpy.float64),
+            lat[ix, mask].astype(numpy.float64),
+        )
+        intersection_list = geographic.algorithms.intersection(
+            line_string, polygon,
+            spheroid=wgs84) if polygon else [line_string]
+        if len(intersection_list) > 0:
             row: NDArray[numpy.void] = result[jx]
             row['pass_number'] = pass_index + 1
             row['first_time'], row['last_time'] = _get_time_bounds(
                 lat_nadir[ix, :],
                 pass_time[ix, :],
-                intersection,
+                # Assuming that only one intersection is possible,
+                # since polygon is a rectangle.
+                intersection_list[0],
             )
             jx += 1
 
