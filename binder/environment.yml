@@ -1,4 +1,4 @@
-name: search_swot
+name: altimetry-search
 channels:
   - conda-forge
 dependencies:
