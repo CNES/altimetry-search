@@ -6,7 +6,7 @@ dependencies:
   - ipywidgets
   - netcdf4
   - pandas
-  - pyinterp
+  - pyinterp>=2026.2.0
   - voila
   - cartopy
   - python=3.11
