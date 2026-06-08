@@ -5,8 +5,10 @@ import pathlib
 
 class Mission(StrEnum):
     """The mission selected in the application."""
-    SWOT_SWATH = ('Swot - swath')
-    SWOT_NADIR = ('Swot - nadir')
+    SWOT_SWATH_SCIENCE = ('Swot Science - swath')
+    SWOT_NADIR_SCIENCE = ('Swot Science - nadir')
+    SWOT_SWATH_CALVAL = ('Swot Calval - swath')
+    SWOT_NADIR_CALVAL = ('Swot Calval - nadir')
 
 
 class MissionType(Enum):
@@ -21,6 +23,8 @@ class MissionProperties:
     mission_type: MissionType
     orf_file: str = dataclasses.field(default_factory=str)
     orbit_file: str = dataclasses.field(default_factory=str)
+    nb_cycle: int = 200
+    first_cycle: int = 1
 
     def __post_init__(self):
         """Checks that orf and orbit file exist, raises a FileNotFoundError if
@@ -33,12 +37,27 @@ class MissionProperties:
 
 
 missions_properties = {
-    Mission.SWOT_SWATH:
-    MissionProperties(MissionType.SWATH, 'resources/SWOT_ORF.json',
-                      'resources/SWOT_orbit.nc'),
-    Mission.SWOT_NADIR:
-    MissionProperties(MissionType.NADIR, 'resources/SWOT_ORF.json',
-                      'resources/SWOT_orbit.nc')
+    Mission.SWOT_SWATH_SCIENCE:
+    MissionProperties(
+        MissionType.SWATH, 'resources/SWOT_science_ORF.json',
+        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_science_orbit.nc'),
+    Mission.SWOT_NADIR_SCIENCE:
+    MissionProperties(MissionType.NADIR, 'resources/SWOT_science_ORF.json',
+                      'resources/SWOT_science_orbit.nc'),
+    Mission.SWOT_SWATH_CALVAL:
+    MissionProperties(
+        MissionType.SWATH,
+        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_ORF.json',
+        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_orbit.nc',
+        nb_cycle=105,
+        first_cycle=474),
+    Mission.SWOT_NADIR_CALVAL:
+    MissionProperties(
+        MissionType.NADIR,
+        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_ORF.json',
+        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_orbit.nc',
+        nb_cycle=105,
+        first_cycle=474)
 }
 
 

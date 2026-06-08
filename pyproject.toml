@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "altimetry-search"
+dynamic = ["version"]
+description = "Alti search"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "pyinterp",
+    "ipyleaflet",
+    "ipywidgets"
+]
+authors = [
+    {name = "Robin Chevrier", email = "rchevrier@groupcls.com"},
+    {name = "Anne-Sophie Tonneau", email = "atonneau@groupcls.com"}
+]
+maintainers = [
+    {name = "Robin Chevrier", email = "rchevrier@groupcls.com"},
+    {name = "Anne-Sophie Tonneau", email = "atonneau@groupcls.com"}
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Oceanography",
+    "Development Status :: 4 - Beta"]
+
+[tool.setuptools_scm]
+local_scheme = "no-local-version"
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+]

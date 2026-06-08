@@ -46,17 +46,37 @@ def calculate_cycle_axis(
     cycles = orf.load_json(pathlib.Path(mission_properties.orf_file))
 
     cycle_first_measurement = numpy.full(
-        (200, ),
+        (mission_properties.nb_cycle, ),
         numpy.datetime64('NAT'),
         dtype='M8[ns]',
     )
+
     keys = sorted(cycles)
     for item in keys:
-        cycle_first_measurement[item - 1] = cycles[item]
-    undefined = numpy.isnat(cycle_first_measurement)
-    cycle_first_measurement[undefined] = numpy.full(
-        (undefined.sum(), ), cycle_duration, dtype='m8[ns]') * numpy.arange(
-            1, 1 + undefined.sum()) + cycles[keys[-1]]
+        cycle_first_measurement[
+            item - (mission_properties.first_cycle)] = cycles[item]
+
+    # Linear interpolation of NAT surrounded by known values,
+    # and extrapolation of the tail with arange
+    indices = numpy.arange(len(cycle_first_measurement))
+    known = ~numpy.isnat(cycle_first_measurement)
+    last_known_idx = indices[known][-1]
+
+    known_indices = indices[known]
+    known_values = cycle_first_measurement[known].astype('i8')
+    interpolated = numpy.interp(indices, known_indices,
+                                known_values).astype('M8[ns]')
+
+    interior_nat = ~known & (indices <= last_known_idx)
+    cycle_first_measurement[interior_nat] = interpolated[interior_nat]
+
+    tail_nat = ~known & (indices > last_known_idx)
+    tail_count = tail_nat.sum()
+    if tail_count > 0:
+        cycle_first_measurement[tail_nat] = numpy.full(
+            (tail_count, ), cycle_duration, dtype='m8[ns]') * numpy.arange(
+                1, 1 + tail_count) + cycles[keys[-1]]
+
     return TemporalAxis(cycle_first_measurement)
 
 
@@ -91,10 +111,16 @@ def get_selected_passes(
         cycle_duration = get_cycle_duration(ds)
         search_duration = search_duration or cycle_duration
         axis = calculate_cycle_axis(cycle_duration, mission_properties)
+        print(axis)
         dates = numpy.array([date, date + search_duration])
+        print(dates)
         indices = axis.find_indexes(dates).ravel()
+        print(indices)
+        print(passes_per_cycle)
         cycle_numbers = numpy.repeat(
-            numpy.arange(indices[0], indices[-1]) + 1, passes_per_cycle)
+            numpy.arange(indices[0], indices[-1]) +
+            mission_properties.first_cycle, passes_per_cycle)
+        print(cycle_numbers)
         axis_slice = axis[indices[0]:indices[-1] + 1]
         first_date_of_cycle = numpy.repeat(axis_slice, passes_per_cycle)
         pass_numbers = numpy.tile(numpy.arange(1, passes_per_cycle + 1),
