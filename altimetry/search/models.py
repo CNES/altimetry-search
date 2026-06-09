@@ -45,19 +45,17 @@ missions_properties = {
     MissionProperties(MissionType.NADIR, 'resources/SWOT_science_ORF.json',
                       'resources/SWOT_science_orbit.nc'),
     Mission.SWOT_SWATH_CALVAL:
-    MissionProperties(
-        MissionType.SWATH,
-        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_ORF.json',
-        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_orbit.nc',
-        nb_cycle=105,
-        first_cycle=474),
+    MissionProperties(MissionType.SWATH,
+                      'resources/SWOT_calval_ORF.json',
+                      'resources/SWOT_calval_orbit.nc',
+                      nb_cycle=105,
+                      first_cycle=474),
     Mission.SWOT_NADIR_CALVAL:
-    MissionProperties(
-        MissionType.NADIR,
-        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_ORF.json',
-        '/home/atonneau/workspace/TESTS/SEARCH_SWOT/SWOT_calval_orbit.nc',
-        nb_cycle=105,
-        first_cycle=474)
+    MissionProperties(MissionType.NADIR,
+                      'resources/SWOT_calval_ORF.json',
+                      'resources/SWOT_calval_orbit.nc',
+                      nb_cycle=105,
+                      first_cycle=474)
 }
 
 

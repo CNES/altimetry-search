@@ -337,7 +337,7 @@ class MapSelection:
             # Display a message to inform the user that the computation is in
             # progress.
             with self.out:
-                IPython.display.display('CCCComputing...')
+                IPython.display.display('Computing...')
 
             if self.mission_widget.value is None:
                 self.display_message('Please select a mission.')

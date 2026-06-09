@@ -43,6 +43,7 @@ def calculate_cycle_axis(
     Returns:
         Temporal axis of the cycle.
     """
+    print(mission_properties.orf_file)
     cycles = orf.load_json(pathlib.Path(mission_properties.orf_file))
 
     cycle_first_measurement = numpy.full(
@@ -98,6 +99,7 @@ def get_selected_passes(
         mission_properties = mission
     elif isinstance(mission, models.Mission):
         mission_properties = models.MissionPropertiesLoader().load(mission)
+    print(mission_properties.orbit_file)
 
     # To avoid getting a warning from xarray about decoding timedeltas, we set
     # decode_timedelta to True. The warning appears because orbit files do not
@@ -111,16 +113,11 @@ def get_selected_passes(
         cycle_duration = get_cycle_duration(ds)
         search_duration = search_duration or cycle_duration
         axis = calculate_cycle_axis(cycle_duration, mission_properties)
-        print(axis)
         dates = numpy.array([date, date + search_duration])
-        print(dates)
         indices = axis.find_indexes(dates).ravel()
-        print(indices)
-        print(passes_per_cycle)
         cycle_numbers = numpy.repeat(
             numpy.arange(indices[0], indices[-1]) +
             mission_properties.first_cycle, passes_per_cycle)
-        print(cycle_numbers)
         axis_slice = axis[indices[0]:indices[-1] + 1]
         first_date_of_cycle = numpy.repeat(axis_slice, passes_per_cycle)
         pass_numbers = numpy.tile(numpy.arange(1, passes_per_cycle + 1),
@@ -199,6 +196,7 @@ def get_pass_passage_time(
         mission_properties = mission
     elif isinstance(mission, models.Mission):
         mission_properties = models.MissionPropertiesLoader().load(mission)
+    print(mission_properties.orbit_file)
 
     passes = numpy.array(sorted(set(selected_passes['pass_number']))) - 1
 
