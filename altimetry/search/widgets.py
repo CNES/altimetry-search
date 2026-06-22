@@ -52,6 +52,16 @@ class InvalidDate(Exception):
     """Invalid date exception."""
 
 
+def _default_start_date() -> datetime.date:
+    """Default value of the start date picker (today)."""
+    return datetime.date.today()
+
+
+def _default_last_date() -> datetime.date:
+    """Default value of the last date picker (tomorrow)."""
+    return datetime.date.today() + datetime.timedelta(days=1)
+
+
 @dataclasses.dataclass(frozen=True)
 class DateSelection:
     """Date selection widget."""
@@ -67,13 +77,12 @@ class DateSelection:
             self, 'start_date',
             ipywidgets.DatePicker(description='First date:',
                                   disabled=False,
-                                  value=datetime.date.today()))
+                                  value=_default_start_date()))
         object.__setattr__(
             self, 'last_date',
             ipywidgets.DatePicker(description='Last date:',
                                   disabled=False,
-                                  value=datetime.date.today() +
-                                  datetime.timedelta(days=1)))
+                                  value=_default_last_date()))
 
     def display(self) -> ipywidgets.Widget:
         """Display the widget.
@@ -92,6 +101,39 @@ class DateSelection:
         return numpy.datetime64(self.start_date.value), numpy.datetime64(
             self.last_date.value) - numpy.datetime64(
                 self.start_date.value)  # type: ignore[return-value]
+
+    def set_bounds(self, date_start: datetime.date | None,
+                   date_end: datetime.date | None) -> None:
+        """Restrict (or remove the restriction on) the selectable period.
+
+        If date_start (resp. date_end) is None, the corresponding picker is
+        reset to its default value (today / tomorrow) instead of being
+        bounded.
+
+        Args:
+            date_start: Lower bound of the selectable period, or None to
+                remove the lower bound and reset to the default value.
+            date_end: Upper bound of the selectable period, or None to
+                remove the upper bound and reset to the default value.
+        """
+        # Clear any existing bounds first, so that setting the new values
+        # below can never be silently clamped by stale min/max traits.
+        self.start_date.min = None
+        self.start_date.max = None
+        self.last_date.min = None
+        self.last_date.max = None
+
+        self.start_date.value = (date_start if date_start is not None else
+                                 _default_start_date())
+        self.last_date.value = (date_end if date_end is not None else
+                                _default_last_date())
+
+        # Now that the values are valid, apply the new bounds. This cannot
+        # trigger an unwanted auto-clamp since the values already fit.
+        self.start_date.min = date_start
+        self.start_date.max = date_end
+        self.last_date.min = date_start
+        self.last_date.max = date_end
 
 
 def _setup_draw_control(
@@ -211,6 +253,14 @@ class MapSelection:
         if not (change['old'] is None or self.mission_widget.value is None):
             self.delete_last_selection()
             self.draw_control.clear_polygons()
+
+        if self.mission_widget.value is None:
+            self.date_selection.set_bounds(None, None)
+        else:
+            mission_properties = models.MissionPropertiesLoader().load(
+                self.mission_widget.value)
+            self.date_selection.set_bounds(mission_properties.date_start,
+                                           mission_properties.date_end)
 
     def display(self) -> ipywidgets.Widget:
         """Display the widget.
