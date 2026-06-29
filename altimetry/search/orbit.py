@@ -43,7 +43,6 @@ def calculate_cycle_axis(
     Returns:
         Temporal axis of the cycle.
     """
-    print(mission_properties.orf_file)
     cycles = orf.load_json(pathlib.Path(mission_properties.orf_file))
 
     cycle_first_measurement = numpy.full(
@@ -57,8 +56,8 @@ def calculate_cycle_axis(
         cycle_first_measurement[
             item - (mission_properties.first_cycle)] = cycles[item]
 
-    # Linear interpolation of NAT surrounded by known values,
-    # and extrapolation of the tail with arange
+    # Need for linear interpolation in case some cycles are missing in the ORF file.
+    # This is the case for Swot Calval phase, for example.
     indices = numpy.arange(len(cycle_first_measurement))
     known = ~numpy.isnat(cycle_first_measurement)
     last_known_idx = indices[known][-1]
@@ -71,6 +70,9 @@ def calculate_cycle_axis(
     interior_nat = ~known & (indices <= last_known_idx)
     cycle_first_measurement[interior_nat] = interpolated[interior_nat]
 
+    # Cycles past the last known one cannot be interpolated (no later cycle to
+    # bound the gap). Extrapolate them forward from the last known cycle at the
+    # nominal cycle_duration so TemporalAxis stays finite and strictly increasing.
     tail_nat = ~known & (indices > last_known_idx)
     tail_count = tail_nat.sum()
     if tail_count > 0:
@@ -99,13 +101,13 @@ def get_selected_passes(
         mission_properties = mission
     elif isinstance(mission, models.Mission):
         mission_properties = models.MissionPropertiesLoader().load(mission)
-    print(mission_properties.orbit_file)
 
-    # To avoid getting a warning from xarray about decoding timedeltas, we set
-    # decode_timedelta to True. The warning appears because orbit files do not
-    # have the appropriate attributes to decode timedeltas.
-    # TODO rewrite the auxiliary data with the proper encoding
-    # (dtype='timedelta64[ns]')
+    # pass_time / start_time / end_time are stored as proper timedelta64[ns]
+    # (units='nanoseconds' + dtype='timedelta64[ns]' attributes). We pass
+    # decode_timedelta=True explicitly: this is required to silence a transitional
+    # xarray FutureWarning about the changing default of decode_timedelta (None ->
+    # False), not to compensate for missing attributes. Can be dropped once the
+    # whole stack runs an xarray where decoding is driven by the dtype attribute.
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
         passes_per_cycle = ds.sizes['pass_number']
@@ -196,7 +198,6 @@ def get_pass_passage_time(
         mission_properties = mission
     elif isinstance(mission, models.Mission):
         mission_properties = models.MissionPropertiesLoader().load(mission)
-    print(mission_properties.orbit_file)
 
     passes = numpy.array(sorted(set(selected_passes['pass_number']))) - 1
 

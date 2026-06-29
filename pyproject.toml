@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "altimetry-search"
 dynamic = ["version"]
 description = "Alti search"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "pandas",
     "pyinterp",
@@ -14,10 +14,12 @@ dependencies = [
     "ipywidgets"
 ]
 authors = [
+    {name = "Frédéric Briol", email = "fbriol@groupcls.com"},
     {name = "Robin Chevrier", email = "rchevrier@groupcls.com"},
     {name = "Anne-Sophie Tonneau", email = "atonneau@groupcls.com"}
 ]
 maintainers = [
+    {name = "Frédéric Briol", email = "fbriol@groupcls.com"},
     {name = "Robin Chevrier", email = "rchevrier@groupcls.com"},
     {name = "Anne-Sophie Tonneau", email = "atonneau@groupcls.com"}
 ]
