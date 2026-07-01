@@ -52,16 +52,6 @@ class InvalidDate(Exception):
     """Invalid date exception."""
 
 
-def _default_start_date() -> datetime.date:
-    """Default value of the start date picker (today)."""
-    return datetime.date.today()
-
-
-def _default_last_date() -> datetime.date:
-    """Default value of the last date picker (tomorrow)."""
-    return datetime.date.today() + datetime.timedelta(days=1)
-
-
 @dataclasses.dataclass(frozen=True)
 class DateSelection:
     """Date selection widget."""
@@ -77,12 +67,13 @@ class DateSelection:
             self, 'start_date',
             ipywidgets.DatePicker(description='First date:',
                                   disabled=False,
-                                  value=_default_start_date()))
+                                  value=datetime.date.today() -
+                                  datetime.timedelta(days=5)))
         object.__setattr__(
             self, 'last_date',
             ipywidgets.DatePicker(description='Last date:',
                                   disabled=False,
-                                  value=_default_last_date()))
+                                  value=datetime.date.today()))
 
     def display(self) -> ipywidgets.Widget:
         """Display the widget.
@@ -102,38 +93,51 @@ class DateSelection:
             self.last_date.value) - numpy.datetime64(
                 self.start_date.value)  # type: ignore[return-value]
 
-    def set_bounds(self, date_start: datetime.date | None,
-                   date_end: datetime.date | None) -> None:
-        """Restrict (or remove the restriction on) the selectable period.
+    def set_defaults(self, phase_date_end: datetime.date | None) -> None:
+        """Set the default values of the date pickers.
 
-        If date_start (resp. date_end) is None, the corresponding picker is
-        reset to its default value (today / tomorrow) instead of being
-        bounded.
+        last_date defaults to the end date of the phase if one is defined,
+        otherwise to today. start_date always defaults to last_date minus
+        5 days (it never defaults to the phase start date).
 
         Args:
-            date_start: Lower bound of the selectable period, or None to
-                remove the lower bound and reset to the default value.
-            date_end: Upper bound of the selectable period, or None to
-                remove the upper bound and reset to the default value.
+            phase_date_end: End date of the current phase, or None if there
+                is no phase selected / the phase has no end date.
         """
-        # Clear any existing bounds first, so that setting the new values
-        # below can never be silently clamped by stale min/max traits.
-        self.start_date.min = None
-        self.start_date.max = None
-        self.last_date.min = None
-        self.last_date.max = None
+        self.last_date.value = (phase_date_end if phase_date_end is not None
+                                else datetime.date.today())
+        self.start_date.value = self.last_date.value - datetime.timedelta(
+            days=5)
 
-        self.start_date.value = (date_start if date_start is not None else
-                                 _default_start_date())
-        self.last_date.value = (date_end if date_end is not None else
-                                _default_last_date())
+    def validate(self, phase_date_start: datetime.date | None,
+                 phase_date_end: datetime.date | None) -> None:
+        """Check that the selected dates lie within the phase bounds.
 
-        # Now that the values are valid, apply the new bounds. This cannot
-        # trigger an unwanted auto-clamp since the values already fit.
-        self.start_date.min = date_start
-        self.start_date.max = date_end
-        self.last_date.min = date_start
-        self.last_date.max = date_end
+        Args:
+            phase_date_start: Start date of the current phase, or None if
+                there is no lower bound.
+            phase_date_end: End date of the current phase, or None if there
+                is no upper bound.
+
+        Raises:
+            InvalidDate: If start_date is before phase_date_start, or
+                last_date is after phase_date_end.
+        """
+        error_date = '<b><font color="#D32F2F">{}</font></b>'
+        phase_date = '<b>{}</b>'
+
+        if (phase_date_start is not None
+                and self.start_date.value < phase_date_start):
+            raise InvalidDate('The first date ' +
+                              error_date.format(self.start_date.value) +
+                              ' is before the start of the phase: ' +
+                              phase_date.format(phase_date_start))
+        if (phase_date_end is not None
+                and self.last_date.value > phase_date_end):
+            raise InvalidDate('The last date ' +
+                              error_date.format(self.last_date.value) +
+                              ' is after the end of the phase: ' +
+                              phase_date.format(phase_date_end))
 
 
 def _setup_draw_control(
@@ -255,12 +259,11 @@ class MapSelection:
             self.draw_control.clear_polygons()
 
         if self.mission_widget.value is None:
-            self.date_selection.set_bounds(None, None)
+            self.date_selection.set_defaults(None)
         else:
             mission_properties = models.MissionPropertiesLoader().load(
                 self.mission_widget.value)
-            self.date_selection.set_bounds(mission_properties.date_start,
-                                           mission_properties.date_end)
+            self.date_selection.set_defaults(mission_properties.date_end)
 
     def display(self) -> ipywidgets.Widget:
         """Display the widget.
@@ -395,6 +398,9 @@ class MapSelection:
 
             mission_properties = models.MissionPropertiesLoader().load(
                 self.mission_widget.value)
+
+            self.date_selection.validate(mission_properties.date_start,
+                                         mission_properties.date_end)
 
             first_date, search_duration = self.date_selection.values()
 

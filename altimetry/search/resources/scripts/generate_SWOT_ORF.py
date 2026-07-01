@@ -34,24 +34,24 @@ import json
 import logging
 import pathlib
 
-import numpy
-
 from fcollections.implementations import NetcdfFilesDatabaseSwotLRL3
+import numpy
 
 logger = logging.getLogger(__name__)
 
-L3_VERSION = "3.0"
-L3_SUBSET  = "Expert"
-STACK_DIM  = "CYCLES_PASSES"
-TIME_UNIT  = "ms"   # precision of the serialised ISO timestamps
-
+L3_VERSION = '3.0'
+L3_SUBSET = 'Expert'
+STACK_DIM = 'CYCLES_PASSES'
+TIME_UNIT = 'ms'  # precision of the serialised ISO timestamps
 
 # ───────────────────────────────────────────────────────────────────────────────
 # 1. Query one pass over several cycles
 # ───────────────────────────────────────────────────────────────────────────────
 
+
 def query_pass_stacked(db, cycles, pass_number):
-    """Query the line times of one pass over several cycles in a single dataset.
+    """Query the line times of one pass over several cycles in a single
+    dataset.
 
     Uses the database ``stack='CYCLES_PASSES'`` option so every requested cycle
     comes back at once. Only cycles that actually contain the pass appear in the
@@ -81,7 +81,8 @@ def query_pass_stacked(db, cycles, pass_number):
         ds = ds.isel(pass_number=0)
 
     time = numpy.asarray(ds['time'].values).astype('datetime64[ns]')
-    cycnums = numpy.atleast_1d(numpy.asarray(ds['cycle_number'].values)).astype(int)
+    cycnums = numpy.atleast_1d(numpy.asarray(
+        ds['cycle_number'].values)).astype(int)
 
     # A single-cycle stacked query drops the leading cycle axis. Restore it so
     # cycles can always be indexed along axis 0.
@@ -95,7 +96,9 @@ def query_pass_stacked(db, cycles, pass_number):
 # 2. Cycle start times
 # ───────────────────────────────────────────────────────────────────────────────
 
-def cycle_start_from_pass1(time2d: numpy.ndarray, cycnums: numpy.ndarray) -> dict:
+
+def cycle_start_from_pass1(time2d: numpy.ndarray,
+                           cycnums: numpy.ndarray) -> dict:
     """Map each cycle number to its start time, derived from pass 1.
 
     The cycle start is the first valid time of pass 1 (the first half-orbit) in
@@ -114,7 +117,7 @@ def cycle_start_from_pass1(time2d: numpy.ndarray, cycnums: numpy.ndarray) -> dic
         row = time2d[i]
         valid = ~numpy.isnat(row)
         if valid.any():
-            cmap[int(cyc)] = row[valid][0]   # datetime64[ns]
+            cmap[int(cyc)] = row[valid][0]  # datetime64[ns]
     return cmap
 
 
@@ -139,6 +142,7 @@ def to_serializable(cycle_start_map: dict) -> dict:
 # 3. Main
 # ───────────────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     """Parse CLI arguments and write the ORF JSON.
 
@@ -147,31 +151,36 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(
         description='Generate a SWOT ORF (cycle start times) from the local '
-                    'L3 SSH database')
-    parser.add_argument(
-        '--l3-db-path', type=pathlib.Path, required=True,
-        help='Path to local L3 SSH database directory')
-    parser.add_argument(
-        '--cycle-start', type=int, required=True,
-        help='First cycle number (inclusive)')
-    parser.add_argument(
-        '--cycle-end', type=int, required=True,
-        help='Last cycle number (inclusive)')
-    parser.add_argument(
-        '--output', type=pathlib.Path,
-        default=pathlib.Path('SWOT_ORF.json'),
-        help='Output JSON file (default: SWOT_ORF.json)')
+        'L3 SSH database')
+    parser.add_argument('--l3-db-path',
+                        type=pathlib.Path,
+                        required=True,
+                        help='Path to local L3 SSH database directory')
+    parser.add_argument('--cycle-start',
+                        type=int,
+                        required=True,
+                        help='First cycle number (inclusive)')
+    parser.add_argument('--cycle-end',
+                        type=int,
+                        required=True,
+                        help='Last cycle number (inclusive)')
+    parser.add_argument('--output',
+                        type=pathlib.Path,
+                        default=pathlib.Path('SWOT_ORF.json'),
+                        help='Output JSON file (default: SWOT_ORF.json)')
     args = parser.parse_args()
 
     cycles = range(args.cycle_start, args.cycle_end + 1)
 
     logger.info('[1/3] Initializing L3 database: %s', args.l3_db_path)
     if not args.l3_db_path.exists():
-        raise FileNotFoundError(f'L3 database path not found: {args.l3_db_path}')
-    db = NetcdfFilesDatabaseSwotLRL3(str(args.l3_db_path), follow_symlinks=True)
+        raise FileNotFoundError(
+            f'L3 database path not found: {args.l3_db_path}')
+    db = NetcdfFilesDatabaseSwotLRL3(str(args.l3_db_path),
+                                     follow_symlinks=True)
 
-    logger.info('[2/3] Querying pass 1 over cycles %d..%d…',
-                args.cycle_start, args.cycle_end)
+    logger.info('[2/3] Querying pass 1 over cycles %d..%d…', args.cycle_start,
+                args.cycle_end)
     time1, cyc1 = query_pass_stacked(db, cycles, pass_number=1)
     cycle_start_map = cycle_start_from_pass1(time1, cyc1)
     logger.info('      %d cycle start(s) found', len(cycle_start_map))
@@ -180,7 +189,8 @@ def main() -> None:
     serializable = to_serializable(cycle_start_map)
     with open(args.output, 'w', encoding='utf-8') as f:
         json.dump(serializable, f, indent=2)
-    logger.info('Done: %d cycles written to %s', len(serializable), args.output)
+    logger.info('Done: %d cycles written to %s', len(serializable),
+                args.output)
 
 
 if __name__ == '__main__':
