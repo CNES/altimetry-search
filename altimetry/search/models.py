@@ -1,12 +1,15 @@
 import dataclasses
+import datetime
 from enum import Enum, StrEnum, auto
 import pathlib
 
 
 class Mission(StrEnum):
     """The mission selected in the application."""
-    SWOT_SWATH = ('Swot - swath')
-    SWOT_NADIR = ('Swot - nadir')
+    SWOT_SWATH_SCIENCE = ('Swot Science - swath')
+    SWOT_NADIR_SCIENCE = ('Swot Science - nadir')
+    SWOT_SWATH_CALVAL = ('Swot Calval - swath')
+    SWOT_NADIR_CALVAL = ('Swot Calval - nadir')
 
 
 class MissionType(Enum):
@@ -21,6 +24,13 @@ class MissionProperties:
     mission_type: MissionType
     orf_file: str = dataclasses.field(default_factory=str)
     orbit_file: str = dataclasses.field(default_factory=str)
+    first_cycle: int = dataclasses.field(default_factory=int)
+    nb_cycle: int = dataclasses.field(default_factory=int)
+    #: Lower bound of the selectable period
+    date_start: datetime.date = dataclasses.field(
+        default_factory=datetime.date.today)
+    #: Upper bound of the selectable period (None: no upper bound)
+    date_end: datetime.date | None = None
 
     def __post_init__(self):
         """Checks that orf and orbit file exist, raises a FileNotFoundError if
@@ -33,12 +43,40 @@ class MissionProperties:
 
 
 missions_properties = {
-    Mission.SWOT_SWATH:
-    MissionProperties(MissionType.SWATH, 'resources/SWOT_ORF.json',
-                      'resources/SWOT_orbit.nc'),
-    Mission.SWOT_NADIR:
-    MissionProperties(MissionType.NADIR, 'resources/SWOT_ORF.json',
-                      'resources/SWOT_orbit.nc')
+    Mission.SWOT_SWATH_SCIENCE:
+    MissionProperties(
+        MissionType.SWATH,
+        'resources/SWOT_science_ORF.json',
+        'resources/SWOT_science_orbit.nc',
+        first_cycle=1,
+        nb_cycle=399,
+        date_start=datetime.date(2023, 7, 21),
+    ),
+    Mission.SWOT_NADIR_SCIENCE:
+    MissionProperties(
+        MissionType.NADIR,
+        'resources/SWOT_science_ORF.json',
+        'resources/SWOT_science_orbit.nc',
+        first_cycle=1,
+        nb_cycle=399,
+        date_start=datetime.date(2023, 7, 21),
+    ),
+    Mission.SWOT_SWATH_CALVAL:
+    MissionProperties(MissionType.SWATH,
+                      'resources/SWOT_calval_ORF.json',
+                      'resources/SWOT_calval_orbit.nc',
+                      first_cycle=474,
+                      nb_cycle=105,
+                      date_start=datetime.date(2023, 3, 29),
+                      date_end=datetime.date(2023, 7, 10)),
+    Mission.SWOT_NADIR_CALVAL:
+    MissionProperties(MissionType.NADIR,
+                      'resources/SWOT_calval_ORF.json',
+                      'resources/SWOT_calval_orbit.nc',
+                      first_cycle=474,
+                      nb_cycle=105,
+                      date_start=datetime.date(2023, 3, 29),
+                      date_end=datetime.date(2023, 7, 10)),
 }
 
 
