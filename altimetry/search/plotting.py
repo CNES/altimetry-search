@@ -326,15 +326,11 @@ def plot_line(
 
 
 def _get_lons_lats(outer: list[geographic.Point], east: float):
-    lons = numpy.array([p.lon for p in outer])
+    # Add the east point of the geographical box. This will ensure numpy
+    # unwrapping will put the longitudes in the same convention as the box.
+    lons = numpy.array([east] + [p.lon for p in outer])
     lats = numpy.array([p.lat for p in outer])
-    lons = numpy.deg2rad(
-        (numpy.array([p.lon
-                      for p in outer], dtype=numpy.float64) - east) % 360.0 +
-        east)
-    lons = numpy.unwrap(lons, discont=numpy.pi)
-    lons = numpy.rad2deg(lons)
-
+    lons = numpy.unwrap(lons, period=360)[1:]
     return lons, lats
 
 
