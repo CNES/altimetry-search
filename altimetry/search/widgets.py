@@ -16,6 +16,7 @@ import ipywidgets
 import numpy
 import pandas
 from pyinterp.geometry import geographic
+from traitlets import TraitError
 
 from . import models, orbit, plotting
 
@@ -140,6 +141,106 @@ class DateSelection:
                               phase_date.format(phase_date_end))
 
 
+class GeoBox(ipywidgets.VBox):
+
+    def __init__(
+        self,
+        min_lon=-180.0,
+        min_lat=-90.0,
+        max_lon=180.0,
+        max_lat=90.0,
+    ):
+        self._initializing = True
+
+        self.min_lon = ipywidgets.FloatText(
+            value=min_lon,
+            description='Min Lon',
+        )
+        self.min_lat = ipywidgets.FloatText(
+            value=min_lat,
+            description='Min Lat',
+        )
+        self.max_lon = ipywidgets.FloatText(
+            value=max_lon,
+            description='Max Lon',
+        )
+        self.max_lat = ipywidgets.FloatText(
+            value=max_lat,
+            description='Max Lat',
+        )
+
+        self.draw_button = ipywidgets.Button(
+            description='Draw on map',
+            icon='square-o',
+            button_style='info',
+        )
+
+        self.error = ipywidgets.HTML()
+
+        grid = ipywidgets.VBox([
+            self.min_lon,
+            self.min_lat,
+            self.max_lon,
+            self.max_lat,
+        ])
+
+        super().__init__([
+            grid,
+            self.draw_button,
+            self.error,
+        ])
+
+        for w in (
+                self.min_lon,
+                self.min_lat,
+                self.max_lon,
+                self.max_lat,
+        ):
+            w.observe(self._on_change, names='value')
+
+        self._initializing = False
+        self._validate()
+
+    def _on_change(self, change):
+        self._validate()
+
+    def _validate(self):
+        if self._initializing:
+            return
+
+        try:
+            if not (-90 <= self.min_lat.value <= 90):
+                raise TraitError('Min latitude must be between -90 and 90.')
+
+            if not (-90 <= self.max_lat.value <= 90):
+                raise TraitError('Max latitude must be between -90 and 90.')
+
+            if self.min_lon.value > self.max_lon.value:
+                raise TraitError('Min longitude must be <= max longitude.')
+
+            if self.min_lat.value > self.max_lat.value:
+                raise TraitError('Min latitude must be <= max latitude.')
+
+            self.error.value = ''
+            self.draw_button.disabled = False
+
+        except TraitError as e:
+            self.error.value = (f'<span style="color:red">{e}</span>')
+            self.draw_button.disabled = True
+
+    @property
+    def bbox(self):
+        return (
+            self.min_lon.value,
+            self.min_lat.value,
+            self.max_lon.value,
+            self.max_lat.value,
+        )
+
+    def on_draw(self, callback):
+        self.draw_button.on_click(lambda _: callback(self.bbox))
+
+
 def _setup_draw_control(
     on_draw: Callable[[ipywidgets.Widget, str, dict],
                       None]) -> ipyleaflet.Control:
@@ -166,8 +267,8 @@ def _setup_draw_control(
 
 def _setup_map(date_selection: DateSelection,
                mission_widget: ipywidgets.Dropdown, help: ipywidgets.Button,
-               search: ipywidgets.Button,
-               draw_control: ipyleaflet.DrawControl) -> ipyleaflet.Map:
+               search: ipywidgets.Button, draw_control: ipyleaflet.DrawControl,
+               geo_box: GeoBox) -> ipyleaflet.Map:
     """Setup the map.
 
     Args:
@@ -196,6 +297,8 @@ def _setup_map(date_selection: DateSelection,
     m.add_control(
         ipyleaflet.WidgetControl(widget=search, position='bottomright'))
     m.add_control(ipyleaflet.WidgetControl(widget=help, position='bottomleft'))
+    m.add_control(ipyleaflet.WidgetControl(widget=geo_box,
+                                           position='topright'))
     return m
 
 
@@ -240,10 +343,13 @@ class MapSelection:
             value=None,
         ))
 
+    geo_box: GeoBox = dataclasses.field(default_factory=GeoBox)
+
     def __post_init__(self) -> None:
         self.draw_control = _setup_draw_control(self.handle_draw)
         self.m = _setup_map(self.date_selection, self.mission_widget,
-                            self.help, self.search, self.draw_control)
+                            self.help, self.search, self.draw_control,
+                            self.geo_box)
         self.main_widget = ipywidgets.VBox([self.m, self.out])
         self.search.on_click(self.handle_compute)
         self.mission_widget.observe(self.mission_widget_callback,
@@ -252,6 +358,7 @@ class MapSelection:
             HTML_HELP.format(mission=self.mission_widget.value),
             button_style='info',
             width='800px'))
+        self.geo_box.on_draw()
 
     def mission_widget_callback(self, change):
         if not (change['old'] is None or self.mission_widget.value is None):
