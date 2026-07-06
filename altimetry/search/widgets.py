@@ -228,6 +228,12 @@ class GeoBox(ipywidgets.VBox):
             self.error.value = (f'<span style="color:red">{e}</span>')
             self.draw_button.disabled = True
 
+    def set_bbox(self, min_lon, min_lat, max_lon, max_lat):
+        self.min_lon.value = min_lon
+        self.min_lat.value = min_lat
+        self.max_lon.value = max_lon
+        self.max_lat.value = max_lat
+
     @property
     def bbox(self):
         return (
@@ -259,6 +265,7 @@ def _setup_draw_control(
     draw_control.rectangle = {'shapeOptions': {'color': '#0000FF'}}
     draw_control.circle = {}
     draw_control.edit = False
+    draw_control.remove = False
 
     draw_control.on_draw(on_draw)
 
@@ -342,6 +349,7 @@ class MapSelection:
             description='Mission:',
             value=None,
         ))
+    current_rect: ipyleaflet.Rectangle | None = None
 
     geo_box: GeoBox = dataclasses.field(default_factory=GeoBox)
 
@@ -358,7 +366,7 @@ class MapSelection:
             HTML_HELP.format(mission=self.mission_widget.value),
             button_style='info',
             width='800px'))
-        self.geo_box.on_draw()
+        self.geo_box.on_draw(self.draw_bbox)
 
     def mission_widget_callback(self, change):
         if not (change['old'] is None or self.mission_widget.value is None):
@@ -398,7 +406,27 @@ class MapSelection:
         """Delete the last selection."""
         self.remove_half_orbit_footprints()
         self.selection = None
-        self.bounds = DEFAULT_BOUNDS
+        if self.current_rect is not None:
+            self.m.remove(self.current_rect)
+        self.current_rect = None
+
+    def draw_bbox(self, bbox):
+
+        min_lon, min_lat, max_lon, max_lat = bbox
+
+        if self.current_rect is not None:
+            self.m.remove(self.current_rect)
+
+        self.current_rect = ipyleaflet.Rectangle(
+            bounds=[
+                [min_lat, min_lon],
+                [max_lat, max_lon],
+            ],
+            color='red',
+            fill_opacity=0.1,
+        )
+
+        self.m.add(self.current_rect)
 
     def handle_draw(self, _target, action, geo_json) -> None:
         """Handle the draw event.
@@ -425,10 +453,10 @@ class MapSelection:
             # selected zone.
             x = numpy.array([item[0] for item in coordinates[0]])
             y = numpy.array([item[1] for item in coordinates[0]])
+
             x0, x1 = x[0], x[2]
             y0, y1 = y[0], y[1]
             xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
-            self.bounds = ((min(x), min(y)), (max(x), max(y)))
             lons = list(reversed(xs)) + list(xs)
             lats = [y0] * len(xs) + [y1] * len(xs)
             # Close the polygon by adding the first
@@ -440,6 +468,10 @@ class MapSelection:
                     numpy.array(lons, dtype=numpy.float64),
                     numpy.array(lats, dtype=numpy.float64),
                 ))
+
+            self.geo_box.set_bbox(min(x), min(y), max(x), max(y))
+            self.draw_bbox(self.geo_box.bbox)
+            self.draw_control.clear()
         except (KeyError, IndexError):
             self.selection = None
 
@@ -528,7 +560,7 @@ class MapSelection:
 
             # Plot the half_orbits on the map.
             self.half_orbits = plotting.plot_selected_passes(
-                self.selection, mission_properties, self.bounds[0][0],
+                self.selection, mission_properties, self.geo_box.bbox[0],
                 selected_passes)
 
             # Rename the columns of the DataFrame to display them in the
