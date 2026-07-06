@@ -16,6 +16,7 @@ import ipywidgets
 import numpy
 import pandas
 from pyinterp.geometry import geographic
+from traitlets import TraitError
 
 from . import models, orbit, plotting
 
@@ -41,11 +42,14 @@ area of interest, click on the
 search for {mission} passes. The results are displayed in the table below and
 the half_orbits that intersect the area of interest are displayed on the map.
 Click on the marker to view the pass number.<br>
-You can draw multiple bounding boxes, but only the last one will be used for
-the search. You can also delete one or all bounding boxes by clicking on the
-<span style="background-color: lightgray;"><code>trash</code></span> icon.<br>
+You can draw one bounding box, or input its coordinate using the widget on the
+top right. Drawing a new box will delete the previous search results.
 At the top right side of the map, you can select the period of interest, and the
 mission. The default period is the last 1 day.</p>"""
+
+#: Geographical box, given as (lon_min, lat_min, lon_max, lat_max). Coordinates
+# are expected in degrees.
+Box = tuple[float, float, float, float]
 
 
 class InvalidDate(Exception):
@@ -140,16 +144,162 @@ class DateSelection:
                               phase_date.format(phase_date_end))
 
 
+class GeoBox(ipywidgets.VBox):
+    """GeoBox widget for inputing and displaying the Rectangle bounds.
+
+    Args:
+        min_lon: Minimum longitude of the geographical box (must be < max_lon).
+        Given in degrees.
+        min_lat: Minimum latitude of the geographical box (must be < max_lat and
+        between -90° and 90°). Given in degrees.
+        max_lon: Maximum longitude of the geographical box (must be > min_lon).
+        Given in degrees.
+        max_lat: Maximum latitude of the geographical box (must be > min_lat and
+        between -90° and 90°). Given in degrees.
+    """
+
+    def __init__(
+        self,
+        min_lon=-180.0,
+        min_lat=-90.0,
+        max_lon=180.0,
+        max_lat=90.0,
+    ):
+        self._initializing = True
+
+        self.min_lon = ipywidgets.FloatText(
+            value=min_lon,
+            description='Min Lon',
+        )
+        self.min_lat = ipywidgets.FloatText(
+            value=min_lat,
+            description='Min Lat',
+        )
+        self.max_lon = ipywidgets.FloatText(
+            value=max_lon,
+            description='Max Lon',
+        )
+        self.max_lat = ipywidgets.FloatText(
+            value=max_lat,
+            description='Max Lat',
+        )
+
+        self.draw_button = ipywidgets.Button(
+            description='Draw on map',
+            icon='square-o',
+            button_style='info',
+        )
+
+        self.error = ipywidgets.HTML()
+
+        grid = ipywidgets.VBox([
+            self.min_lon,
+            self.min_lat,
+            self.max_lon,
+            self.max_lat,
+        ])
+
+        super().__init__([
+            grid,
+            self.draw_button,
+            self.error,
+        ])
+
+        for w in (
+                self.min_lon,
+                self.min_lat,
+                self.max_lon,
+                self.max_lat,
+        ):
+            w.observe(self._on_change, names='value')
+
+        self._initializing = False
+        self._validate()
+
+    def _on_change(self, change):
+        # Observe new coordinates with a validator.
+        self._validate()
+
+    def _validate(self):
+        # Only accept [-90, 90] latitudes, and ensure minimum bounds are always
+        # inferior to maximum bounds (for both longitudes and latitudes). In
+        # case the selection is not valid, the draw button will be disabled to
+        # prevent firing the callbacks on an invalid shape.
+        if self._initializing:
+            return
+
+        try:
+            if not (-90 <= self.min_lat.value <= 90):
+                raise TraitError('Min latitude must be between -90 and 90.')
+
+            if not (-90 <= self.max_lat.value <= 90):
+                raise TraitError('Max latitude must be between -90 and 90.')
+
+            if self.min_lon.value > self.max_lon.value:
+                raise TraitError('Min longitude must be <= max longitude.')
+
+            if self.min_lat.value > self.max_lat.value:
+                raise TraitError('Min latitude must be <= max latitude.')
+
+            self.error.value = ''
+            self.draw_button.disabled = False
+
+        except TraitError as e:
+            self.error.value = (f'<span style="color:red">{e}</span>')
+            self.draw_button.disabled = True
+
+    def set_bbox(self, min_lon: float, min_lat: float, max_lon: float,
+                 max_lat: float):
+        """Geographical box setter.
+
+        Can be used to synchronize the GeoBox instance with other components
+        defining a box.
+
+        See Also:
+            MapSelection: For handling both a GeoBox instance and DrawControl,
+            and sharing their box definition.
+        """
+        self.min_lon.value = min_lon
+        self.min_lat.value = min_lat
+        self.max_lon.value = max_lon
+        self.max_lat.value = max_lat
+
+    @property
+    def bbox(self) -> Box:
+        """Geographical box as (lon_min, lat_min, lon_max, lat_max)."""
+        return (
+            self.min_lon.value,
+            self.min_lat.value,
+            self.max_lon.value,
+            self.max_lat.value,
+        )
+
+    def on_draw(self, callback: Callable[[Box], None]):
+        """Register a callback to fire when the geographical box is updated.
+
+        Parameters
+        ----------
+        callback
+        """
+        self.draw_button.on_click(lambda _: callback(self.bbox))
+
+
 def _setup_draw_control(
     on_draw: Callable[[ipywidgets.Widget, str, dict],
                       None]) -> ipyleaflet.Control:
     """Setup the map.
 
+    Draw control is enabled to draw rectangles only. In addition, the rectangle
+    is not owned by the draw control - said control is expected to be cleared
+    once the rectangle ownership has been changed - so deletion and edition of
+    the features are disabled.
+
     Args:
-        on_draw: Callback called when the user draws a rectangle.
+        on_draw: Callback called when the user draws a rectangle. It will be
+        registered to the returned control widget.
 
     Returns:
-        Map widget.
+        Draw control widget.
     """
     draw_control = ipyleaflet.DrawControl()
     draw_control.polyline = {}
@@ -158,6 +308,7 @@ def _setup_draw_control(
     draw_control.rectangle = {'shapeOptions': {'color': '#0000FF'}}
     draw_control.circle = {}
     draw_control.edit = False
+    draw_control.remove = False
 
     draw_control.on_draw(on_draw)
 
@@ -166,8 +317,8 @@ def _setup_draw_control(
 
 def _setup_map(date_selection: DateSelection,
                mission_widget: ipywidgets.Dropdown, help: ipywidgets.Button,
-               search: ipywidgets.Button,
-               draw_control: ipyleaflet.DrawControl) -> ipyleaflet.Map:
+               search: ipywidgets.Button, draw_control: ipyleaflet.DrawControl,
+               geo_box: GeoBox) -> ipyleaflet.Map:
     """Setup the map.
 
     Args:
@@ -175,6 +326,7 @@ def _setup_map(date_selection: DateSelection,
         search: Search button.
         help: Help button.
         on_draw: Callback called when the user draws a rectangle.
+        geo_box: Geographical box widget.
 
     Returns:
         Map widget.
@@ -196,6 +348,8 @@ def _setup_map(date_selection: DateSelection,
     m.add_control(
         ipyleaflet.WidgetControl(widget=search, position='bottomright'))
     m.add_control(ipyleaflet.WidgetControl(widget=help, position='bottomleft'))
+    m.add_control(ipyleaflet.WidgetControl(widget=geo_box,
+                                           position='topright'))
     return m
 
 
@@ -239,11 +393,18 @@ class MapSelection:
             description='Mission:',
             value=None,
         ))
+    # Single Rectangle instance shared by both the DrawControl and GeoBox
+    # widgets.
+    current_rect: ipyleaflet.Rectangle | None = None
+    # GeoBox widget for displaying the current Rectangle and inputing another
+    # geographical box.
+    geo_box: GeoBox = dataclasses.field(default_factory=GeoBox)
 
     def __post_init__(self) -> None:
         self.draw_control = _setup_draw_control(self.handle_draw)
         self.m = _setup_map(self.date_selection, self.mission_widget,
-                            self.help, self.search, self.draw_control)
+                            self.help, self.search, self.draw_control,
+                            self.geo_box)
         self.main_widget = ipywidgets.VBox([self.m, self.out])
         self.search.on_click(self.handle_compute)
         self.mission_widget.observe(self.mission_widget_callback,
@@ -252,6 +413,7 @@ class MapSelection:
             HTML_HELP.format(mission=self.mission_widget.value),
             button_style='info',
             width='800px'))
+        self.geo_box.on_draw(self.draw_bbox)
 
     def mission_widget_callback(self, change):
         if not (change['old'] is None or self.mission_widget.value is None):
@@ -291,7 +453,52 @@ class MapSelection:
         """Delete the last selection."""
         self.remove_half_orbit_footprints()
         self.selection = None
-        self.bounds = DEFAULT_BOUNDS
+        if self.current_rect is not None:
+            self.m.remove(self.current_rect)
+        self.current_rect = None
+
+    def draw_bbox(self, bbox: Box):
+        """Draw a geographical box on the map.
+
+        Drawing the box will clear the existing selection, search results and
+        related features on the map.
+
+        Args:
+            bbox: geographical box to draw
+
+        See Also:
+            delete_last_selection: Deletion existing selection, search results
+            and related features on the map.
+        """
+        x0, y0, x1, y1 = bbox
+        self.delete_last_selection()
+
+        self.current_rect = ipyleaflet.Rectangle(
+            bounds=[
+                [y0, x0],
+                [y1, x1],
+            ],
+            color='red',
+            fill_opacity=0.1,
+        )
+
+        # Build a polygon with interpolated longitudes between the first and
+        # last points to restrict the search area to the latitude of the
+        # selected zone.
+        xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
+        lons = list(reversed(xs)) + list(xs)
+        lats = [y0] * len(xs) + [y1] * len(xs)
+        # Close the polygon by adding the first
+        # point at the end of the list.
+        lons.append(lons[0])
+        lats.append(lats[0])
+        self.selection = geographic.Polygon(
+            geographic.Ring(
+                numpy.array(lons, dtype=numpy.float64),
+                numpy.array(lats, dtype=numpy.float64),
+            ))
+
+        self.m.add(self.current_rect)
 
     def handle_draw(self, _target, action, geo_json) -> None:
         """Handle the draw event.
@@ -308,33 +515,17 @@ class MapSelection:
         if action != 'created':
             return
 
-        self.delete_last_selection()
-
         try:
             coordinates = geo_json['geometry']['coordinates']
-
-            # Build a polygon with interpolated longitudes between the first and
-            # last points to restrict the search area to the latitude of the
-            # selected zone.
             x = numpy.array([item[0] for item in coordinates[0]])
             y = numpy.array([item[1] for item in coordinates[0]])
-            x0, x1 = x[0], x[2]
-            y0, y1 = y[0], y[1]
-            xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
-            self.bounds = ((min(x), min(y)), (max(x), max(y)))
-            lons = list(reversed(xs)) + list(xs)
-            lats = [y0] * len(xs) + [y1] * len(xs)
-            # Close the polygon by adding the first
-            # point at the end of the list.
-            lons.append(lons[0])
-            lats.append(lats[0])
-            self.selection = geographic.Polygon(
-                geographic.Ring(
-                    numpy.array(lons, dtype=numpy.float64),
-                    numpy.array(lats, dtype=numpy.float64),
-                ))
+
+            bbox = min(x), min(y), max(x), max(y)
+            self.geo_box.set_bbox(*bbox)
+            self.draw_bbox(self.geo_box.bbox)
+            self.draw_control.clear()
         except (KeyError, IndexError):
-            self.selection = None
+            self.delete_last_selection()
 
     def display_message(self,
                         msg,
@@ -421,7 +612,7 @@ class MapSelection:
 
             # Plot the half_orbits on the map.
             self.half_orbits = plotting.plot_selected_passes(
-                self.selection, mission_properties, self.bounds[0][0],
+                self.selection, mission_properties, self.geo_box.bbox[0],
                 selected_passes)
 
             # Rename the columns of the DataFrame to display them in the
