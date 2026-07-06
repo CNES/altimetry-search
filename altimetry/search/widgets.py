@@ -412,19 +412,33 @@ class MapSelection:
 
     def draw_bbox(self, bbox):
 
-        min_lon, min_lat, max_lon, max_lat = bbox
-
-        if self.current_rect is not None:
-            self.m.remove(self.current_rect)
+        x0, y0, x1, y1 = bbox
+        self.delete_last_selection()
 
         self.current_rect = ipyleaflet.Rectangle(
             bounds=[
-                [min_lat, min_lon],
-                [max_lat, max_lon],
+                [y0, x0],
+                [y1, x1],
             ],
             color='red',
             fill_opacity=0.1,
         )
+
+        # Build a polygon with interpolated longitudes between the first and
+        # last points to restrict the search area to the latitude of the
+        # selected zone.
+        xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
+        lons = list(reversed(xs)) + list(xs)
+        lats = [y0] * len(xs) + [y1] * len(xs)
+        # Close the polygon by adding the first
+        # point at the end of the list.
+        lons.append(lons[0])
+        lats.append(lats[0])
+        self.selection = geographic.Polygon(
+            geographic.Ring(
+                numpy.array(lons, dtype=numpy.float64),
+                numpy.array(lats, dtype=numpy.float64),
+            ))
 
         self.m.add(self.current_rect)
 
@@ -443,37 +457,17 @@ class MapSelection:
         if action != 'created':
             return
 
-        self.delete_last_selection()
-
         try:
             coordinates = geo_json['geometry']['coordinates']
-
-            # Build a polygon with interpolated longitudes between the first and
-            # last points to restrict the search area to the latitude of the
-            # selected zone.
             x = numpy.array([item[0] for item in coordinates[0]])
             y = numpy.array([item[1] for item in coordinates[0]])
 
-            x0, x1 = x[0], x[2]
-            y0, y1 = y[0], y[1]
-            xs = numpy.linspace(x0, x1, round(x1 - x0) * 2, endpoint=True)
-            lons = list(reversed(xs)) + list(xs)
-            lats = [y0] * len(xs) + [y1] * len(xs)
-            # Close the polygon by adding the first
-            # point at the end of the list.
-            lons.append(lons[0])
-            lats.append(lats[0])
-            self.selection = geographic.Polygon(
-                geographic.Ring(
-                    numpy.array(lons, dtype=numpy.float64),
-                    numpy.array(lats, dtype=numpy.float64),
-                ))
-
-            self.geo_box.set_bbox(min(x), min(y), max(x), max(y))
+            bbox = min(x), min(y), max(x), max(y)
+            self.geo_box.set_bbox(*bbox)
             self.draw_bbox(self.geo_box.bbox)
             self.draw_control.clear()
         except (KeyError, IndexError):
-            self.selection = None
+            self.delete_last_selection()
 
     def display_message(self,
                         msg,
