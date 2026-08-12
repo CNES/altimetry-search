@@ -160,10 +160,10 @@ class GeoBox(ipywidgets.VBox):
 
     def __init__(
         self,
-        min_lon=-180.0,
-        min_lat=-90.0,
-        max_lon=180.0,
-        max_lat=90.0,
+        min_lon=--65.0,
+        min_lat=-30.0,
+        max_lon=10.0,
+        max_lat=60.0,
     ):
         self._initializing = True
 
