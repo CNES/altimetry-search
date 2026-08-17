@@ -18,8 +18,7 @@ import pandas
 from pyinterp.geometry import geographic
 from traitlets import TraitError
 
-from . import plotting
-from .. import models, orbit
+from . import models, orbit, plotting
 
 #: Default bounds of the map
 DEFAULT_BOUNDS = ((-180, -90), (180, 90))
