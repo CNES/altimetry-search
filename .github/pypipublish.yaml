@@ -1,0 +1,68 @@
+name: Python Packaging Pypi
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["*"]
+
+jobs:
+  nightly_build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # https://github.com/actions/checkout/issues/1471
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine setuptools_scm
+      - name: Build package
+        run: |
+          git describe
+          python -m setuptools_scm
+          python -m build
+      - name: Setup pypirc credentials
+        run: |
+          echo "[testpypi]" > ~/.pypirc
+          echo "username = __token__" >> ~/.pypirc
+          echo "password = ${{ secrets.TEST_PYPI_TOKEN }}" >> ~/.pypirc
+      - name: Upload package
+        run: |
+          twine upload --repository testpypi dist/*
+
+  stable_build:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # https://github.com/actions/checkout/issues/1471
+      # Clobber local unannotated tag
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags --force
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine setuptools_scm
+      - name: Build package
+        run: |
+          git describe
+          python -m setuptools_scm
+          python -m build
+      - name: Setup pypirc credentials
+        run: |
+          echo "[pypi]" > ~/.pypirc
+          echo "username = __token__" >> ~/.pypirc
+          echo "password = ${{ secrets.PYPI_TOKEN }}" >> ~/.pypirc
+      - name: Upload package
+        run: |
+          twine upload dist/*
