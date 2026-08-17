@@ -110,12 +110,10 @@ def plot_selected_passes(selected_area: geographic.Polygon,
         left_layers: dict[int, ipyleaflet.Polygon] = {}
         right_layers: dict[int, ipyleaflet.Polygon] = {}
 
-        tuple(
-            map(lambda x: plot_swath(*x, bbox, left_layers, markers, east),
-                left_swath))
-        tuple(
-            map(lambda x: plot_swath(*x, bbox, right_layers, markers, east),
-                right_swath))
+        for pass_number, polygon in left_swath:
+            plot_swath(pass_number, polygon, bbox, left_layers, markers, east)
+        for pass_number, polygon in right_swath:
+            plot_swath(pass_number, polygon, bbox, right_layers, markers, east)
         return [
             SwathFootprint(left=left_layers.get(pass_number,
                                                 ipyleaflet.Polygon()),
@@ -129,7 +127,8 @@ def plot_selected_passes(selected_area: geographic.Polygon,
                        df['pass_number'].values)  # type: ignore[arg-type]
 
     layers: dict[int, ipyleaflet.Polyline] = {}
-    tuple(map(lambda x: plot_line(*x, bbox, layers, markers, east), nadir))
+    for pass_number, line in nadir:
+        plot_line(pass_number, line, bbox, layers, markers, east)
     return [
         NadirFootprint(line=layers.get(pass_number, ipyleaflet.Polyline()),
                        marker=marker)
