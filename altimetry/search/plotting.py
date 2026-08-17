@@ -8,7 +8,7 @@ import pandas
 from pyinterp.geometry import geographic
 import xarray
 
-from .. import models
+from . import models
 
 # List of HTML colors
 COLORS: list[str] = [
