@@ -5,11 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "altimetry-search"
 dynamic = ["version"]
-description = "Orbit pass search API for SWOT altimetry (GUI-free subset of altimetry-search)"
+description = "Alti search"
 requires-python = ">=3.12"
 dependencies = [
     "pandas",
     "pyinterp",
+    "ipyleaflet",
+    "ipywidgets"
 ]
 authors = [
     {name = "Frédéric Briol", email = "fbriol@groupcls.com"},
@@ -35,10 +37,6 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Oceanography",
     "Development Status :: 4 - Beta"]
-
-
-[tool.setuptools.packages.find]
-exclude = ["altimetry.search.gui", "altimetry.search.gui.*"]
 
 [tool.setuptools_scm]
 local_scheme = "no-local-version"
