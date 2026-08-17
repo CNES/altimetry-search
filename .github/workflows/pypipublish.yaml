@@ -2,12 +2,12 @@ name: Python Packaging Pypi
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master"]
     tags: ["*"]
 
 jobs:
   nightly_build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
