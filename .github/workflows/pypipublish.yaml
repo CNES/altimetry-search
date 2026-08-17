@@ -55,7 +55,7 @@ jobs:
           pip install build twine setuptools_scm
       - name: Build package
         run: |
-          git describe
+          git describe --tags
           python -m setuptools_scm
           python -m build
       - name: Setup pypirc credentials
