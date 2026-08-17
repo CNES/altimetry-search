@@ -7,5 +7,7 @@ from .plotting import load_polygons
 from .widgets import MapSelection, compute_selected_passes
 
 __all__ = [
-    'MapSelection', 'compute_selected_passes', 'load_polygons',
+    'MapSelection',
+    'compute_selected_passes',
+    'load_polygons',
 ]
