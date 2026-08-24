@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          lfs: true
       # https://github.com/actions/checkout/issues/1471
       - name: Fetch tags
         run: git fetch --prune --unshallow --tags
@@ -41,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          lfs: true
       # https://github.com/actions/checkout/issues/1471
       # Clobber local unannotated tag
       - name: Fetch tags
