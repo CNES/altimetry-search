@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.1.1] - 2026-08-24
+
+### Fixed
+
+Orbit resource files (`SWOT_calval_orbit.nc`, `SWOT_science_orbit.nc`) were packaged as raw Git LFS pointer files instead of their actual binary content in the PyPI/conda-forge distributions, causing OSError: [Errno -51] NetCDF: Unknown file format at runtime. actions/checkout now fetches LFS content (lfs: true) before building the package.
+All previous releases (1.0.0 through 1.1.0) are affected and should not be used.
+
+---
+
 ## [1.1.0] - 2026-08-21
 
 ### Changed
