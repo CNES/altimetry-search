@@ -25,12 +25,14 @@ class MissionProperties:
     """Represents the properties of a mission."""
     mission_type: MissionType
     orf_file: str = dataclasses.field(default_factory=str)
-    #: Key identifying the orbit file to fetch (see `_sad.OrbitFiles`):
-    #: 'calval' or 'science'. Not a path -- the file itself may need to be
-    #: downloaded from a remote server, see `orbit_file` below.
+    #: Key identifying the orbit file to fetch (see `sad.OrbitFiles`):
+    #: 'swot_calval' or 'swot_science'
     orbit_key: str = dataclasses.field(default_factory=str)
     first_cycle: int = dataclasses.field(default_factory=int)
+    #: Fixed number of cycles for this mission phase
     nb_cycle: int = dataclasses.field(default_factory=int)
+    #: Fixed number of passes per cycle for this mission phase
+    nb_pass: int = dataclasses.field(default_factory=int)
     #: Lower bound of the selectable period
     date_start: datetime.date = dataclasses.field(
         default_factory=datetime.date.today)
@@ -57,7 +59,7 @@ class MissionProperties:
     def orbit_file(self) -> pathlib.Path:
         """Local path to this mission's orbit file, downloading it on first
         access if not already present locally (see
-        `altimetry.search._sad.OrbitFiles`)."""
+        `altimetry.search.sad.OrbitFiles`)."""
         if self._orbit_file_cache is None:
             self._orbit_file_cache = sad.OrbitFiles()[self.orbit_key]
         return self._orbit_file_cache
@@ -71,6 +73,7 @@ missions_properties = {
         'swot_science',
         first_cycle=1,
         nb_cycle=399,
+        nb_pass=584,
         date_start=datetime.date(2023, 7, 21),
     ),
     Mission.SWOT_NADIR_SCIENCE:
@@ -80,6 +83,7 @@ missions_properties = {
         'swot_science',
         first_cycle=1,
         nb_cycle=399,
+        nb_pass=584,
         date_start=datetime.date(2023, 7, 21),
     ),
     Mission.SWOT_SWATH_CALVAL:
@@ -88,6 +92,7 @@ missions_properties = {
                       'swot_calval',
                       first_cycle=474,
                       nb_cycle=105,
+                      nb_pass=28,
                       date_start=datetime.date(2023, 3, 29),
                       date_end=datetime.date(2023, 7, 10)),
     Mission.SWOT_NADIR_CALVAL:
@@ -96,6 +101,7 @@ missions_properties = {
                       'swot_calval',
                       first_cycle=474,
                       nb_cycle=105,
+                      nb_pass=28,
                       date_start=datetime.date(2023, 3, 29),
                       date_end=datetime.date(2023, 7, 10)),
 }
