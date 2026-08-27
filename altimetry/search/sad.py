@@ -180,7 +180,8 @@ class OrbitFiles(IAuxiliaryDataFetcher):
         to the user home (~/.config/sad).
     """
 
-    HTTP_URL = 'https://data.aviso.altimetry.fr/aviso-gateway/data/.orbit_files'
+    HTTP_URL = (
+        'https://data.aviso.altimetry.fr/aviso-gateway/data/.swot_orbit_files')
 
     @property
     def keys(self) -> set[str]:
