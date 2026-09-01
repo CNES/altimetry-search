@@ -13,6 +13,7 @@ dependencies = [
     "xarray",
     "pandas",
     "pyinterp",
+    "requests",
 ]
 authors = [
     {name = "Frédéric Briol", email = "fbriol@groupcls.com"},
