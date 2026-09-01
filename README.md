@@ -1,4 +1,4 @@
-# altimetry-search
+# Altimetry Search
 
 Search and select satellite altimetry passes (SWOT science and cal/val
 phases) by date and geographic area.
@@ -54,6 +54,10 @@ To launch the application, click on the link below:
 To launch jupyterlab in binder, clink on the link below:
 
 * https://mybinder.org/v2/gh/CNES/altimetry-search/HEAD?labpath=main.ipynb
+
+## Changelog
+
+See the [CHANGELOG](CHANGELOG.md) for versions details.
 
 ## License
 
