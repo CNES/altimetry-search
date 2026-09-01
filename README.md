@@ -25,7 +25,7 @@ conda install -c conda-forge altimetry-search
 
 ```python
 import numpy
-
+import pyinterp.geometry.geographic as py_geo
 from altimetry.search import Mission, get_selected_passes, get_pass_passage_time
 
 # Search all passes starting within one cycle of a given date
@@ -36,12 +36,21 @@ selected_passes = get_selected_passes(
 
 # Restrict passes to those crossing a given area, and get the passage time
 # window for each of them
+bbox = py_geo.algorithms.from_wkt(
+    'POLYGON((-6 36,-6 60,36 60,36 36,-6 36))')
+
 passage_time = get_pass_passage_time(
     Mission.SWOT_SWATH_SCIENCE,
     selected_passes,
-    polygon=None,  # or a pyinterp.geometry.geographic.Polygon
+    polygon=bbox
 )
 ```
+
+Available missions are :
+* `SWOT_SWATH_SCIENCE`
+* `SWOT_NADIR_SCIENCE`
+* `SWOT_SWATH_CALVAL`
+* `SWOT_NADIR_CALVAL`
 
 ## Looking for Swot passes using the GUI
 
