@@ -31,8 +31,6 @@ class MissionProperties:
     first_cycle: int = dataclasses.field(default_factory=int)
     #: Fixed number of cycles for this mission phase
     nb_cycle: int = dataclasses.field(default_factory=int)
-    #: Fixed number of passes per cycle for this mission phase
-    nb_pass: int = dataclasses.field(default_factory=int)
     #: Lower bound of the selectable period
     date_start: datetime.date = dataclasses.field(
         default_factory=datetime.date.today)
@@ -73,7 +71,6 @@ missions_properties = {
         'swot_science',
         first_cycle=1,
         nb_cycle=399,
-        nb_pass=584,
         date_start=datetime.date(2023, 7, 21),
     ),
     Mission.SWOT_NADIR_SCIENCE:
@@ -83,7 +80,6 @@ missions_properties = {
         'swot_science',
         first_cycle=1,
         nb_cycle=399,
-        nb_pass=584,
         date_start=datetime.date(2023, 7, 21),
     ),
     Mission.SWOT_SWATH_CALVAL:
@@ -92,7 +88,6 @@ missions_properties = {
                       'swot_calval',
                       first_cycle=474,
                       nb_cycle=105,
-                      nb_pass=28,
                       date_start=datetime.date(2023, 3, 29),
                       date_end=datetime.date(2023, 7, 10)),
     Mission.SWOT_NADIR_CALVAL:
@@ -101,7 +96,6 @@ missions_properties = {
                       'swot_calval',
                       first_cycle=474,
                       nb_cycle=105,
-                      nb_pass=28,
                       date_start=datetime.date(2023, 3, 29),
                       date_end=datetime.date(2023, 7, 10)),
 }
