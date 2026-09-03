@@ -204,25 +204,31 @@ def _line_string(lon_row: NDArray, lat_row: NDArray) -> geographic.LineString:
 
 
 def get_passes_crossing_polygon(
-        mission: models.Mission | models.MissionProperties,
+        mission: models.Mission,
         polygon: geographic.Polygon,
         passes: Sequence[int] | None = None) -> NDArray[numpy.uint16]:
     """Return the pass numbers, among `passes`, whose ground track intersects
     `polygon`.
 
+    Supports two distinct use cases:
+    - No pass numbers known yet: leave `passes` unset (or empty) to get
+      every pass of `mission`'s orbit that falls in `polygon`.
+    - A candidate subset of pass numbers is already known (e.g. from
+      `get_selected_passes`): pass it as `passes` to eliminate those that
+      do not fall in `polygon`, keeping only the ones that do.
+
     Args:
         mission: Selected mission (or mission's properties)
+        polygon: Polygon used to select the passes.
         passes: Pass numbers (1-based) to test. If `None` or empty, every
             pass in the mission's orbit file is tested.
-        polygon: Polygon used to select the passes.
 
     Returns:
-        Sorted array of the 1-based pass numbers intersecting polygon.
+        Sorted array of the 1-based pass numbers intersecting polygon --
+        a subset of `passes` when given, or of every pass in the
+        mission's orbit otherwise.
     """
-    if isinstance(mission, models.MissionProperties):
-        mission_properties = mission
-    elif isinstance(mission, models.Mission):
-        mission_properties = models.MissionPropertiesLoader().load(mission)
+    mission_properties = models.MissionPropertiesLoader().load(mission)
 
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
@@ -233,16 +239,17 @@ def get_passes_crossing_polygon(
         lon = ds.line_string_lon.values[indices, :]
         lat = ds.line_string_lat.values[indices, :]
 
-    wgs84 = geographic.Spheroid()
     result = []
 
     for ix, pass_index in enumerate(indices):
         line_string = _line_string(lon[ix, :], lat[ix, :])
-        if geographic.algorithms.intersection(line_string,
-                                              polygon,
-                                              spheroid=wgs84):
+        if geographic.algorithms.intersects(line_string, polygon):
             result.append(pass_index + 1)
 
+    # uint16 (0-65535) comfortably fits pass_number for SWOT (< 584) and
+    # even geodetic-orbit missions (2000-3000 passes); matches the dtype
+    # used for pass_number elsewhere in this module (get_selected_passes,
+    # get_pass_passage_time).
     return numpy.array(sorted(result), dtype=numpy.uint16)
 
 
