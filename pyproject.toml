@@ -12,7 +12,7 @@ dependencies = [
     "numpy",
     "xarray",
     "pandas",
-    "pyinterp",
+    "pyinterp>=2026.2.0",
     "requests",
 ]
 authors = [
