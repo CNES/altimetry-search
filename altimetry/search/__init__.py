@@ -9,9 +9,14 @@ from .models import (
     MissionPropertiesLoader,
     MissionType,
 )
-from .orbit import get_pass_passage_time, get_selected_passes
+from .orbit import (
+    get_pass_passage_time,
+    get_passes_crossing_polygon,
+    get_selected_passes,
+)
 
 __all__ = [
-    'get_selected_passes', 'get_pass_passage_time', 'Mission', 'MissionType',
+    'get_selected_passes', 'get_pass_passage_time',
+    'get_passes_crossing_polygon', 'Mission', 'MissionType',
     'MissionProperties', 'MissionPropertiesLoader'
 ]

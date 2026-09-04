@@ -5,6 +5,7 @@
 """Calculate the ephemeredes of satellites."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 import pathlib
 
 import numpy
@@ -182,6 +183,84 @@ def _get_time_bounds(
     return min(bounds), max(bounds)
 
 
+def _line_string(lon_row: NDArray, lat_row: NDArray) -> geographic.LineString:
+    """Build the ground-track LineString for one pass, dropping NaN (missing)
+    points.
+
+    Args:
+        lon_row: Longitudes of the pass's ground track (one row of
+            ``line_string_lon``).
+        lat_row: Latitudes of the pass's ground track (one row of
+            ``line_string_lat``).
+
+    Returns:
+        The pass's ground track as a LineString.
+    """
+    mask = numpy.isfinite(lon_row) & numpy.isfinite(lat_row)
+    return geographic.LineString(
+        lon_row[mask].astype(numpy.float64),
+        lat_row[mask].astype(numpy.float64),
+    )
+
+
+def get_passes_crossing_polygon(
+        mission: models.Mission,
+        polygon: geographic.Polygon,
+        passes: Sequence[int] | None = None) -> NDArray[numpy.uint16]:
+    """Return the pass numbers, among `passes`, whose ground track intersects
+    `polygon`.
+
+    Supports two distinct use cases:
+    - No pass numbers known yet: leave `passes` unset (or empty) to get
+      every pass of `mission`'s orbit that falls in `polygon`.
+    - A candidate subset of pass numbers is already known (e.g. from
+      `get_selected_passes`): pass it as `passes` to eliminate those that
+      do not fall in `polygon`, keeping only the ones that do.
+
+    Args:
+        mission: Selected mission (or mission's properties)
+        polygon: Polygon used to select the passes.
+        passes: Pass numbers (1-based) to test. If `None` or empty, every
+            pass in the mission's orbit file is tested.
+
+    Returns:
+        Sorted array of the 1-based pass numbers intersecting polygon --
+        a subset of `passes` when given, or of every pass in the
+        mission's orbit otherwise.
+    """
+    mission_properties = models.MissionPropertiesLoader().load(mission)
+
+    with xarray.open_dataset(mission_properties.orbit_file,
+                             decode_timedelta=True) as ds:
+        nb_pass = ds.sizes['pass_number']
+
+        if passes is None or len(passes) == 0:
+            indices = numpy.arange(nb_pass)
+        else:
+            invalid = sorted({p for p in passes if not 1 <= p <= nb_pass})
+            if invalid:
+                msg = (f'pass_number must be in [1, {nb_pass}] for mission '
+                       f'{mission}, got invalid: {invalid}')
+                raise ValueError(msg)
+
+            indices = numpy.array(sorted(set(passes))) - 1
+        lon = ds.line_string_lon.values[indices, :]
+        lat = ds.line_string_lat.values[indices, :]
+
+    result = []
+
+    for ix, pass_index in enumerate(indices):
+        line_string = _line_string(lon[ix, :], lat[ix, :])
+        if geographic.algorithms.intersects(line_string, polygon):
+            result.append(pass_index + 1)
+
+    # uint16 (0-65535) comfortably fits pass_number for SWOT (< 584) and
+    # even geodetic-orbit missions (2000-3000 passes); matches the dtype
+    # used for pass_number elsewhere in this module (get_selected_passes,
+    # get_pass_passage_time).
+    return numpy.array(sorted(result), dtype=numpy.uint16)
+
+
 def get_pass_passage_time(
         mission: models.Mission | models.MissionProperties,
         selected_passes: pandas.DataFrame,
@@ -225,11 +304,7 @@ def get_pass_passage_time(
     wgs84 = geographic.Spheroid()
 
     for ix, pass_index in enumerate(passes):
-        mask = numpy.isfinite(lon[ix, :]) & numpy.isfinite(lat[ix, :])
-        line_string = geographic.LineString(
-            lon[ix, mask].astype(numpy.float64),
-            lat[ix, mask].astype(numpy.float64),
-        )
+        line_string = _line_string(lon[ix, :], lat[ix, :])
         intersection_list = geographic.algorithms.intersection(
             line_string, polygon,
             spheroid=wgs84) if polygon else [line_string]
