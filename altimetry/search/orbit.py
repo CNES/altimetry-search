@@ -232,9 +232,17 @@ def get_passes_crossing_polygon(
 
     with xarray.open_dataset(mission_properties.orbit_file,
                              decode_timedelta=True) as ds:
+        nb_pass = ds.sizes['pass_number']
+
         if passes is None or len(passes) == 0:
-            indices = numpy.arange(ds.sizes['pass_number'])
+            indices = numpy.arange(nb_pass)
         else:
+            invalid = sorted({p for p in passes if not 1 <= p <= nb_pass})
+            if invalid:
+                msg = (f'pass_number must be in [1, {nb_pass}] for mission '
+                       f'{mission}, got invalid: {invalid}')
+                raise ValueError(msg)
+
             indices = numpy.array(sorted(set(passes))) - 1
         lon = ds.line_string_lon.values[indices, :]
         lat = ds.line_string_lat.values[indices, :]
