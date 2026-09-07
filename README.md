@@ -26,24 +26,37 @@ conda install -c conda-forge altimetry-search
 ```python
 import numpy
 import pyinterp.geometry.geographic as py_geo
-from altimetry.search import Mission, get_selected_passes, get_pass_passage_time
+from altimetry.search import Mission, get_selected_passes, get_pass_passage_time, get_passes_crossing_polygon
+
+mission = Mission.SWOT_SWATH_SCIENCE
 
 # Search all passes starting within one cycle of a given date
 selected_passes = get_selected_passes(
-    Mission.SWOT_SWATH_SCIENCE,
+    mission,
     date=numpy.datetime64("2024-01-01"),
+)
+
+# Get the list of passes numbers intersecting a polygon
+bbox = py_geo.algorithms.from_wkt(
+    'POLYGON((-6 36,-6 60,36 60,36 36,-6 36))')
+
+passes = numpy.array(sorted(set(selected_passes['pass_number'])))
+
+passes_list = get_passes_crossing_polygon(
+    mission=mission,
+    polygon=bbox,
+    passes=passes
 )
 
 # Restrict passes to those crossing a given area, and get the passage time
 # window for each of them
-bbox = py_geo.algorithms.from_wkt(
-    'POLYGON((-6 36,-6 60,36 60,36 36,-6 36))')
 
 passage_time = get_pass_passage_time(
-    Mission.SWOT_SWATH_SCIENCE,
+    mission,
     selected_passes,
     polygon=bbox
 )
+
 ```
 
 Available missions are :

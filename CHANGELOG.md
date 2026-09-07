@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [2.1.0] - 2026-09-07
+
+### Added
+- New `get_passes_crossing_polygon` function that returns the pass numbers, among a list of passes, whose ground track intersects a polygon
+
+### Changed
+- `pyinterp>=2026.2.0` dependency
+
+---
+
 ## [2.0.1] - 2026-09-01
 
 ### Changed
